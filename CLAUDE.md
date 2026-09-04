@@ -51,6 +51,70 @@ across 1.16 → 1.17: `common.h`, `ekf.h` and `control.cpp` all moved.
 corpus *before* flashing. Pass criterion is decision-identical `estimator_aid_src_*` output at
 default parameters — not "it builds".
 
+## Current status — 2026-09-05
+
+**Pristine v1.17.0 + CI only. No rover patches applied.**
+
+| | |
+|---|---|
+| HEAD | `f3de5d1ccd` — `ci(build): add px4_fmu-v6x_default build workflow` |
+| First build | ✅ green, 5m47s, [run 33914115176](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/33914115176) |
+| Artifact | `Way_to_Mark/PX4-Firmware/3WD/f3de5d1ccd-ci-build-add-px4-fmu-v6x-default-build-workflow/` |
+| Workflows | 1 active (`Build px4_fmu-v6x_default`), **27 disabled** via `gh workflow disable` |
+| Target | `px4_fmu-v6x_default` — the `_rover` target is the natural first F1 switch |
+
+### ✅ The build-identification problem is solved, and proven
+
+The first artifact records **`git_identity = f3de5d1`** — *our* commit.
+
+Every build from the old `Vetri2425/PX4-Autopilot` fork recorded base hash `54f0455f`
+regardless of content, because CI `cp`'d files onto a tagged checkout without committing.
+That is why `ver_sw` could never identify a build and a flash was undetectable from
+firmware version or FCU parameters. Building from a real committed tree fixes it
+structurally. **Do not regress this.**
+
+### ⚠ Workflow trigger quirk
+
+Workflows added in a repository's **first** push register but do **not** auto-trigger —
+that first build needed `gh workflow run`. Subsequent pushes to `dyx-3wd-production`
+trigger normally, so the one-commit → one-trigger → one-artifact rule holds from here.
+
+### Next: F1, per `DYX_3WD/docs/Firmware/F-tasks.md`
+
+The 39 commits of the old v1.16.2 fork were audited: **13 must carry, 7 re-evaluate,
+19 drop**. Roughly half does not survive — mostly CI scaffolding for the abolished
+`cp`-overlay build, plus CubeOrange board files superseded by v1.17's stock
+`fmu-v6x/rover.px4board`.
+
+```
+F1.1  drivetrain      RoboClaw QPPS, raw mode, creep, deadband
+F1.2  instrumentation logger topics  ← BEFORE the estimator work, or GATE 2 is unevaluable
+F1.3  estimator       WENC fusion + IMU lever arm            ⟵ GATE 2
+F1.4  GNSS yaw        EKF2_GPS_YAW_N/_G + encoder timestamp  ⟵ GATE 2
+F1.5  transport       DDS client on rover target + RTCM over DDS
+F1.6  board           px4_fmu-v6x_rover
+F1.7  decisions       7 re-evaluate rows → one recorded decision each
+```
+
+Two verified facts that shape F1.1 and F1.7:
+- **The RoboClaw QPPS patch is still needed.** v1.17's `setMotorSpeed()` still sends
+  `DriveForwardMotor1` via `sendUnsigned7Bit` — open-loop. Upstream's entire
+  v1.16.2→v1.17 diff for that driver is 4 insertions / 10 deletions.
+- **Two rows must not be re-applied blind.** `RoverLandDetector` grew waypoint-distance
+  logic upstream, and `mission_block.cpp` now has `VEHICLE_TYPE_ROVER` handling at line
+  213 that v1.16.2 lacked.
+
+### Upstream blockers tracked against this firmware
+
+- **#27514** (`risk:safety-critical`) — stale setpoint applied ~900 ms after an external
+  process dies. 31 cm at 0.35 m/s.
+- **#27497** — rover differential does not turn in Mission Mode on v1.17 stable.
+- **#27388** — `uxrce_dds_client` silently stops publishing; only an FC reboot recovers.
+- **#28519** — timesync takes 5–10 min to converge; ~40 ms offset ≈ 1.4 cm.
+- **#27860** — DDS client never retries if the agent is absent at boot. Our exact boot order.
+
+---
+
 ## Build — CI only, one commit → one trigger → one artifact
 
 ```sh
