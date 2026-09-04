@@ -1,0 +1,36 @@
+name: Build px4_fmu-v6x_default
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dyx-3wd-production
+    paths-ignore:
+      - 'CLAUDE.md'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    # Same pinned toolchain PX4's own release CI uses for this target (nuttx group),
+    # per Tools/ci/generate_board_targets_json.py at this commit. A bare Ubuntu runner
+    # with apt-installed gcc-arm-none-eabi produces slightly larger code and overflows
+    # FLASH by ~16KB on px4_fmu-v6x_default even though the source is unmodified.
+    container:
+      image: ghcr.io/px4/px4-dev:v1.16.0-rc1-258-g0369abd556
+    steps:
+      - name: Git ownership workaround
+        run: git config --system --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build px4_fmu-v6x_default
+        run: make px4_fmu-v6x_default
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: px4_fmu-v6x_default_firmware
+          path: build/px4_fmu-v6x_default/px4_fmu-v6x_default.px4
