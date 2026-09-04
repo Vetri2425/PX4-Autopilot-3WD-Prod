@@ -73,11 +73,20 @@ That is why `ver_sw` could never identify a build and a flash was undetectable f
 firmware version or FCU parameters. Building from a real committed tree fixes it
 structurally. **Do not regress this.**
 
-### ⚠ Workflow trigger quirk
+### ⚠ Workflow trigger quirk — first push is SLOW, not silent
 
-Workflows added in a repository's **first** push register but do **not** auto-trigger —
-that first build needed `gh workflow run`. Subsequent pushes to `dyx-3wd-production`
-trigger normally, so the one-commit → one-trigger → one-artifact rule holds from here.
+After the initial 481 MB push, GitHub took **~20 minutes** to index the repository. During
+that window `gh workflow list` returned nothing and no run appeared, so the first build was
+started manually with `gh workflow run`. The queued push event then fired on its own at
+20:21 UTC — producing **two runs of the same commit** `f3de5d1ccd` (dispatch `33914115176`,
+push `33915833210`).
+
+**The correct action on a large first push is to wait, not to dispatch.** An earlier version
+of this note said workflows "do not auto-trigger" on a first push; that was wrong, and acting
+on it is what created the duplicate.
+
+`paths-ignore` is confirmed working: the `CLAUDE.md`-only commits `c0e429d918` and
+`ac2e9173a2` triggered no run at all.
 
 ### Next: F1, per `DYX_3WD/docs/Firmware/F-tasks.md`
 
