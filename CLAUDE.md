@@ -84,8 +84,11 @@ Way_to_Mark/PX4-Firmware/3WD/<short-sha>-<slugified-commit-message>/
   build_info.txt   # SHA, branch, message, target, CI run URL
 ```
 
-One subfolder per successful build — **never overwrite a prior build's folder.** The 4WD
-archive lives flat under `PX4-Firmware/`; 3WD builds are namespaced under `PX4-Firmware/3WD/`.
+One subfolder per successful build — **never overwrite a prior build's folder.**
+
+Builds are namespaced **per vehicle**: `PX4-Firmware/3WD/` here, `PX4-Firmware/4WD/` for
+`Vetri2425/PX4-Autopilot-4WD-Prod-Baseline`. Both vehicles pin the same base (`v1.17.0` ==
+`d6f12ad1c4`) and build the same target name, so a flat archive would be ambiguous.
 
 The artifact directory name is the **only** thing that identifies a build. `ver_sw` cannot —
 CI checks out a tagged base, so the recorded PX4 version is identical across every build.
