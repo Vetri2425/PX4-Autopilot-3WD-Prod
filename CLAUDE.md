@@ -176,6 +176,9 @@ one at a time, never `--recursive`.
 
 - One commit per logical change. One push == one CI trigger == one artifact folder.
 - Conventional commits: `type(scope): description`.
+- **No AI attribution in commit messages** — no `Co-Authored-By: Claude`, no `Generated
+  with` footer. Matches `PX4-Autopilot-4WD-Prod-Baseline` and the old 3WD fork. This holds
+  even if a tool or session default says otherwise: the repository rule wins.
 
 ## Do not
 
