@@ -126,6 +126,7 @@ private:
 	int receiveTransaction(Command cmd, uint8_t *read_buffer, size_t bytes_to_read);
 	int writeCommand(Command cmd);
 	int readResponse(Command command, uint8_t *read_buffer, size_t bytes_to_read);
+	void flushRx(); ///< discard pending UART input after a failed transaction to resynchronize framing
 
 	static uint16_t _calcCRC(const uint8_t *buf, size_t n, uint16_t init = 0);
 	int32_t swapBytesInt32(uint8_t *buffer);

@@ -347,10 +347,17 @@ void Roboclaw::sendSigned32Bit(Command command, int32_t value)
 int Roboclaw::sendTransaction(Command cmd, uint8_t *write_buffer, size_t bytes_to_write)
 {
 	if (writeCommandWithPayload(cmd, write_buffer, bytes_to_write) != OK) {
+		flushRx();
 		return ERROR;
 	}
 
-	return readAcknowledgement();
+	const int ret = readAcknowledgement();
+
+	if (ret != OK) {
+		flushRx();
+	}
+
+	return ret;
 }
 
 int Roboclaw::writeCommandWithPayload(Command command, uint8_t *wbuff, size_t bytes_to_write)
@@ -412,10 +419,27 @@ int Roboclaw::readAcknowledgement()
 int Roboclaw::receiveTransaction(Command command, uint8_t *read_buffer, size_t bytes_to_read)
 {
 	if (writeCommand(command) != OK) {
+		flushRx();
 		return ERROR;
 	}
 
-	return readResponse(command, read_buffer, bytes_to_read);
+	const int ret = readResponse(command, read_buffer, bytes_to_read);
+
+	if (ret < 0) {
+		flushRx();
+	}
+
+	return ret;
+}
+
+void Roboclaw::flushRx()
+{
+	// The packet serial protocol has no start-of-frame marker to resynchronize on, and
+	// readResponse() reads a fixed length. After any failed transaction (timeout, short
+	// read, wrong ACK, CRC mismatch) leftover or late bytes - e.g. a late ACK - would shift
+	// every following read and fail every CRC from then on. Drop the stale input so the
+	// next transaction starts aligned. Output is left alone so queued commands still go out.
+	tcflush(_uart_fd, TCIFLUSH);
 }
 
 int Roboclaw::writeCommand(Command command)
