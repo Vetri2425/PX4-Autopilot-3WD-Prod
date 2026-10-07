@@ -152,6 +152,19 @@ void Ekf::updateGnssYaw(const gnssSample &gnss_sample)
 			      wrap_pi(heading_pred - measured_hdg),        // innovation
 			      heading_innov_var,                           // innovation variance
 			      math::max(_params.ekf2_hdg_gate, 1.f)); // innovation gate
+
+	// Absolute innovation floor. The normalised test is EKF2_HDG_GATE * sqrt(P + R),
+	// so lowering R (EKF2_GPS_YAW_N) to trust an accurate receiver also shrinks the
+	// outlier window - which rejected valid headings during pivots and locked heading
+	// fusion out until the aiding timeout. This floor decouples them: R still sets the
+	// Kalman gain, EKF2_GPS_YAW_G sets the largest innovation still plausible in
+	// absolute terms. It can only ACCEPT an update the gate rejected, never the
+	// reverse, and never touches the gain or the covariance update.
+	if (_params.ekf2_gps_yaw_g > 0.f
+	    && _aid_src_gnss_yaw.innovation_rejected
+	    && fabsf(_aid_src_gnss_yaw.innovation) < _params.ekf2_gps_yaw_g) {
+		_aid_src_gnss_yaw.innovation_rejected = false;
+	}
 }
 
 void Ekf::fuseGnssYaw(float antenna_yaw_offset)

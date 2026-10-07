@@ -483,6 +483,7 @@ private:
 	uORB::PublicationMulti<yaw_estimator_status_s> _yaw_est_pub{ORB_ID(yaw_estimator_status)};
 
 # if defined(CONFIG_EKF2_GNSS_YAW)
+	bool _gps_yaw_n_low_warned{false}; ///< one-shot latch for the EKF2_GPS_YAW_N/_G VerifyParams() warning
 	hrt_abstime _status_gnss_yaw_pub_last {0};
 	uORB::PublicationMulti<estimator_aid_source1d_s> _estimator_aid_src_gnss_yaw_pub {ORB_ID(estimator_aid_src_gnss_yaw)};
 # endif // CONFIG_EKF2_GNSS_YAW
@@ -564,6 +565,10 @@ private:
 		// Used by EKF-GSF experimental yaw estimator
 		(ParamExtFloat<px4::params::EKF2_GSF_TAS>) _param_ekf2_gsf_tas,
 		(ParamFloat<px4::params::EKF2_GPS_YAW_OFF>) _param_ekf2_gps_yaw_off,
+# if defined(CONFIG_EKF2_GNSS_YAW)
+		(ParamExtFloat<px4::params::EKF2_GPS_YAW_N>) _param_ekf2_gps_yaw_n,
+		(ParamExtFloat<px4::params::EKF2_GPS_YAW_G>) _param_ekf2_gps_yaw_g,
+# endif // CONFIG_EKF2_GNSS_YAW
 #endif // CONFIG_EKF2_GNSS
 
 #if defined(CONFIG_EKF2_BAROMETER)
