@@ -193,9 +193,9 @@ void LoggedTopics::add_default_topics()
 	// Wheel-encoder instrumentation for the 3WD rover.
 	// Use non-optional subscriptions so topics that advertise after logger startup
 	// are picked up by Logger::copy_if_updated() retrying the subscription.
-	// The EKF wheel-encoder aid source has at most three EKF instances.
+	// Log all possible Multi-EKF instances, consistent with other estimator topics.
 	add_topic("wheel_encoders", 50);
-	add_topic_multi("estimator_aid_src_wheel_encoder", 50, 3);
+	add_topic_multi("estimator_aid_src_wheel_encoder", 50);
 
 	// log all raw sensors at minimal rate (at least 1 Hz)
 	add_topic_multi("battery_status", 200, 3);
