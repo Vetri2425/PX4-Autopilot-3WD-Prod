@@ -18,6 +18,12 @@ Safety-critical C/C++. This file is the only preloaded context.
 - **Upstream remote:** `upstream` → `https://github.com/PX4/PX4-Autopilot.git` (for reviewing
   future PX4 fixes selectively — never merge `upstream/main` wholesale).
 - Firmware: roadmap F1 code complete at `b19901b004` (2026-10-07). See "Current status".
+- **GPS-driver submodule** `src/drivers/gps/devices` → **`Vetri2425/PX4-GPSDrivers`** (a real GitHub
+  fork of `PX4/PX4-GPSDrivers`), branch `dyx-3wd-production`, based on upstream `0b96958` (the
+  commit v1.17.0 pins). Local clone: `3WD_PROD/PX4-GPSDrivers-3WD-Prod` (remote `upstream` = PX4).
+  **Fork rule:** minimal — only audited deviations, one per commit, each followed by its own
+  submodule-bump commit here. Prefer cherry-picking an upstream fix over writing our own.
+  Deviations so far: `80fe20d` (C3, no receiver configuration).
 
 ## ⛔ PX4 must not auto-configure the GNSS receiver (hard requirement, 2026-10-07)
 
@@ -25,12 +31,18 @@ The UM982 owns its production configuration in its own persistent memory (`SAVEC
 PX4 **only consumes** GNSS / heading data and **injects RTCM**. It must never send receiver
 configuration — not at boot, not on reconnect, not on heading loss.
 
-- **Current firmware violates this:** `GPSDriverNMEA::request_unicore_messages()`
-  (`src/drivers/gps/devices/src/nmea.cpp:1053`, called at `:996`) writes 6 unsaved log commands
-  (`GPGGA`, `UNIAGRICA`, `UNIHEADINGA` @ 0.2 s; `GPGST`, `GPGSA`, `GPRMC` @ 1 s) whenever heading
-  has been missing > 1 s. Required fix: remove/disable that call, in the GPS-driver submodule
-  (`PX4-GPSDrivers`) — needs a submodule fork. No production parameter may re-enable it.
-- Compliant today: RTCM injection (`gps.cpp:625`); `configure()` only probes PX4's own baud.
+- **Fixed in code (C3), `7b583c9eb9`:** fork commit `80fe20d` removes
+  `GPSDriverNMEA::request_unicore_messages()`, its call and `_unicore_heading_received_last`. Stock
+  v1.17 wrote 6 unsaved log commands (`GPGGA`, `UNIAGRICA`, `UNIHEADINGA` @ 0.2 s; `GPGST`, `GPGSA`,
+  `GPRMC` @ 1 s, hardcoded `COM1`) on every `UNIAGRICA` while heading was missing > 1 s. Never
+  reintroduce it or add a parameter that does. **Bench acceptance still pending** (contract below).
+- Compliant: RTCM injection (`gps.cpp:625`); NMEA `configure()` only probes PX4's own baud.
+- ⚠ **Parameter dependency:** `GPS_1_PROTOCOL` must be **6 (NMEA)**. Stock default is 1 (u-blox):
+  the UBX driver writes its configuration frames to the UM982 at every (re)connect; 0 (auto)
+  cycles UBX/MTK/Ashtech/… and never tries NMEA. Open decision for the human: change the rover
+  default to 6 in firmware, or enforce it as a bench-checklist item.
+- Consequence of C3: if the receiver's saved configuration lacks `UNIHEADINGA`, heading is now
+  simply absent (no PX4 repair) — the companion health check must flag it.
 - Open GNSS fixes (C2 restart cycle, C3 config spam, F7 variance-as-σ) are judged under this
   rule: **never fix a reconnect/timeout/heading-loss problem by reconfiguring the receiver.**
 - Receiver message set/rates to store, and acceptance test: `DYX_3WD/docs/contracts/GNSS_receiver_configuration.md`.
@@ -67,13 +79,14 @@ across 1.16 → 1.17: `common.h`, `ekf.h` and `control.cpp` all moved.
 corpus *before* flashing. Pass criterion is decision-identical `estimator_aid_src_*` output at
 default parameters — not "it builds".
 
-## Current status — 2026-10-07 (evening)
+## Current status — 2026-10-07 (night)
 
 **Roadmap F1 firmware code complete. CI-verified, GATE 2 replay-verified where replay applies.**
 
 ⚠ **NOTHING HAS BEEN FLASHED OR HARDWARE-VALIDATED.** Candidate for the first flash:
-`3WD_PROD/PX4-Firmware/3WD/b19901b004-fix-rover-differential-let-explicit-rover-setpoints-drive-offboard-velocity-mode/`
-(FLASH 1,789,484 B = 91.02 %, AXI_SRAM 19.22 %, 0 compiler warnings).
+**`7b583c9eb9`** — `3WD_PROD/PX4-Firmware/3WD/7b583c9eb9-fix-gps-use-dyx-gps-driver-fork-px4-never-configures-the-um982/`
+(FLASH 1,789,004 B = 90.99 %, AXI_SRAM 19.22 %, 0 compiler warnings, CI run 37618859283,
+`.px4` sha256 `304b22bdfbb59033df15012d687f07d352cd01d3ddc62112c35cec24ab779483`).
 
 | Item | Commit | Evidence |
 |---|---|---|
@@ -87,6 +100,9 @@ default parameters — not "it builds".
 | C5 DDS reconnect after agent restart (upstream #26848 backport) | `1bc34ef933` | CI |
 | F1.8/C3 ULog streaming over DDS | `9f07777a32` | CI |
 | F1.7 explicit rover setpoints in OFFBOARD velocity mode (path A) | `b19901b004` | CI; GATE 1 bench pending |
+| A1 RoboClaw RX resync (`tcflush`) | `420768d812` | CI |
+| A2 speed-only encoder reads (`wheel_angle` = NaN) | `4eb9465e3c` | CI |
+| C3 GNSS ownership: GPS-driver fork `80fe20d`, no receiver configuration | `7b583c9eb9` | CI (fork checked out in CI log); object −464 B, no `COM1` strings; bench pending |
 
 Facts that changed the plan:
 - `uxrce_dds_client`, Ethernet and netman (fallback 10.41.10.2) are **already** in the v6x rover
@@ -98,8 +114,7 @@ Facts that changed the plan:
   `EKF2_GPS_YAW_G=0`. Keep WENC off until `EKF2_IMU_POS_*` is re-measured on the 6X mount.
 
 **Since the F1 batch:** A1 RoboClaw RX resync `420768d812`, A2 speed-only encoder reads
-(`wheel_angle` NaN) `4eb9465e3c` — both CI green, archived; **`4eb9465e3c` is the current flash
-candidate**. A9 (WENC must not refresh global velocity-fusion timers) is **HELD**: neutral in
+(`wheel_angle` NaN) `4eb9465e3c` and C3 `7b583c9eb9` — all CI green, archived. A9 (WENC must not refresh global velocity-fusion timers) is **HELD**: neutral in
 replay but its mechanism was never observed and `_time_last_hor_vel_fuse` also drives
 dead-reckoning classification — patch in the working tree + `PX4-Firmware/3WD/_held_patches/`.
 Heading-fault recovery (replay): inherent EKF2 reset-on-continuous-rejection logic, identical in
@@ -109,8 +124,20 @@ mitigate in the companion (`reject_yaw`, GNSS-yaw test ratio).
 **Still open for fine tracking** (from `PX4_DXP/docs/FIRMWARE_PENDING_PATCHES.md`, confirmed in
 v1.17): A1 RoboClaw serial never resyncs (no `tcflush`), A2 encoder-read decimation,
 **A9 WENC refreshes the global velocity-fusion timers (masks GNSS loss, blocks GSF yaw rescue —
-fix before enabling WENC)**, A6 no-slip constraint during pivots; GPS-driver submodule C2/C3/F7.
+fix before enabling WENC)** — HELD; A6 no-slip constraint during pivots (investigation). A1/A2/C3 done.
 C1/C4/F5 are resolved by dropping the always-landed land-detector patch.
+
+**GNSS work order (human, 2026-10-07):** C3 ✅ → **F7** → **C2** → A6/A11 investigation. Each its
+own commit, fork commit + separate submodule bump.
+- **F7** (variance used as σ in `s_variance_m_s` from `UNIAGRICA`): already fixed upstream —
+  **cherry-pick `PX4/PX4-GPSDrivers` `2fb6c6b` (#234)** onto the fork (σ = sqrt of the sum of the
+  three per-axis variances). Do not write a custom version. Feeds EKF2 `sacc` (`EKF2.cpp:2558`).
+- **C2** (restart cycle): NMEA `receive()` returns −1 after 500 ms with no useful packet
+  (`nmea.cpp` "abort after timeout"); the **outer driver in this repo** (`src/drivers/gps/gps.cpp`,
+  receive loop ~`:1013`, then UART close, 500 ms sleep, reopen + baud probe) tears the link down.
+  RTCM is only injected from `pollOrRead()`, so injection pauses ≥ 500 ms. The fix therefore lands
+  at least partly here in `gps.cpp`, not only in the fork. Recover local parser/link state only —
+  never by writing to the receiver.
 
 **GATE 2 replay how-to:** v1.16.2 logs need a byte-level `SensorGps` converter for v1.17
 replay (else zero GNSS fusion); replay is approximate-timestamp and run-to-run nondeterministic
