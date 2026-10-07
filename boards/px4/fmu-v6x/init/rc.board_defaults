@@ -3,8 +3,17 @@
 # board specific defaults
 #------------------------------------------------------------------------------
 
+# DYX 3WD production airframe: generic differential rover.
+param set-default SYS_AUTOSTART 50000
+
 # DYX 3WD production UM982: use the NMEA driver; never probe it as u-blox.
 param set-default GPS_1_PROTOCOL 6
+
+# uXRCE-DDS client over Ethernet to the Jetson agent at 10.41.10.1:8888
+# (PX4 eth0 is static 10.41.10.2/24, see nuttx-config/nsh/defconfig).
+param set-default UXRCE_DDS_CFG 1000
+param set-default UXRCE_DDS_AG_IP 170461697
+param set-default UXRCE_DDS_PRT 8888
 
 # By disabling all 3 INA modules, we use the
 # i2c_launcher instead.

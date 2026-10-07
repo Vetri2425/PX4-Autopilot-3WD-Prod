@@ -25,6 +25,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          # Full history + tags so `git describe` finds v1.17.0. A shallow, tagless
+          # checkout makes PX4 report version 0.0.0, which QGC flags as unknown/unstable.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Build px4_fmu-v6x_rover
         run: make px4_fmu-v6x_rover
