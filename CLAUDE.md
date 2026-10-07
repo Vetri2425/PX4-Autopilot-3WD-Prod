@@ -17,8 +17,7 @@ Safety-critical C/C++. This file is the only preloaded context.
   (switched from `px4_fmu-v6x_default` in `1416913c85`).
 - **Upstream remote:** `upstream` → `https://github.com/PX4/PX4-Autopilot.git` (for reviewing
   future PX4 fixes selectively — never merge `upstream/main` wholesale).
-- Firmware changes so far: F1.1 RoboClaw drivetrain only (`14e3fb88b2`). No EKF2, DDS topic,
-  logger or board-config changes yet.
+- Firmware: roadmap F1 code complete at `b19901b004` (2026-10-07). See "Current status".
 
 ## ⚠ How this repo differs from the 4WD baseline
 
@@ -37,7 +36,7 @@ Re-anchor by diffing each overlaid file against its **v1.16.2 stock ancestor** a
 that semantic diff — never by copying the v1.16.2 file onto v1.17.0. EKF2 is not a stable API
 across 1.16 → 1.17: `common.h`, `ekf.h` and `control.cpp` all moved.
 
-### Planned patch set (Track F1 — F1.1 drivetrain applied, rest pending)
+### Planned patch set (Track F1 — all code landed 2026-10-07; field gates pending)
 
 | Patch | Origin | Notes |
 |---|---|---|
@@ -52,38 +51,45 @@ across 1.16 → 1.17: `common.h`, `ekf.h` and `control.cpp` all moved.
 corpus *before* flashing. Pass criterion is decision-identical `estimator_aid_src_*` output at
 default parameters — not "it builds".
 
-## Current status — 2026-10-07
+## Current status — 2026-10-07 (evening)
 
-**v1.17.0 + CI (rover target) + F1.1 RoboClaw drivetrain. Nothing else applied.**
+**Roadmap F1 firmware code complete. CI-verified, GATE 2 replay-verified where replay applies.**
 
-⚠ **THIS ARTIFACT HAS NOT BEEN FLASHED OR HARDWARE-VALIDATED YET.** "CI green" proves it
-compiles and links; it says nothing about motor behaviour on the vehicle.
+⚠ **NOTHING HAS BEEN FLASHED OR HARDWARE-VALIDATED.** Candidate for the first flash:
+`3WD_PROD/PX4-Firmware/3WD/b19901b004-fix-rover-differential-let-explicit-rover-setpoints-drive-offboard-velocity-mode/`
+(FLASH 1,789,484 B = 91.02 %, AXI_SRAM 19.22 %, 0 compiler warnings).
 
-| | |
-|---|---|
-| HEAD | `14e3fb88b2` — `feat(roboclaw): add closed-loop QPPS drivetrain control` |
-| CI workflow | `.github/workflows/build_fmu_v6x.yml` → `make px4_fmu-v6x_rover` |
-| CI target switch | `1416913c85` — `ci(build): switch 3WD production CI to fmu-v6x rover` ([run 37590295682](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/37590295682), green; stock open-loop RoboClaw, not a field candidate) |
-| F1.1 build | ✅ green, [run 37591482228](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/37591482228) — `Roboclaw.cpp` compiled, 0 compiler warnings |
-| F1.1 memory | FLASH 1,784,812 B / 1920 KB = **90.78%** · AXI_SRAM 100,700 B / 512 KB = **19.21%** · SRAM4 2 KB / 64 KB = 3.12% (+272 B FLASH vs `1416913c85`) |
-| Artifact | `3WD_PROD/PX4-Firmware/3WD/14e3fb88b2-feat-roboclaw-add-closed-loop-qpps-drivetrain-control/` — **production candidate, NOT FLASHED** |
-| Workflows | 1 active (`Build px4_fmu-v6x_rover`), **27 disabled** via `gh workflow disable` |
+| Item | Commit | Evidence |
+|---|---|---|
+| CI → `px4_fmu-v6x_rover` | `1416913c85` | CI |
+| F1.1 RoboClaw QPPS 35/36, raw UART, select, 255, deadbands, `RBCLW_QPPS_MAX`=0 | `14e3fb88b2` | CI |
+| F1.2 logger `wheel_encoders` + all multi-EKF WENC aid-source instances | `385034b7ef`, `809b3561c0` | CI |
+| F1.3 WENC fusion + IMU lever arm; `fuseBodyFrameVelocity` → `aid_sources/body_velocity_fusion.cpp` | `b5189bd734` | GATE 2 neutrality + compatibility vs v1.16.2 |
+| F1.4A RoboClaw encoder timestamp before UART | `07bcfdc601` | CI (replay can't test timing) |
+| F1.4B `EKF2_GPS_YAW_N` / `EKF2_GPS_YAW_G` | `1cc5c364b8` | GATE 2: reproduces 08-05 failure, floor fixes it, 0 reverse actions |
+| F1.5 RTCM over DDS `/fmu/in/gps_inject_data` (PublicationMulti) | `07741c2f26` | CI |
+| C5 DDS reconnect after agent restart (upstream #26848 backport) | `1bc34ef933` | CI |
+| F1.8/C3 ULog streaming over DDS | `9f07777a32` | CI |
+| F1.7 explicit rover setpoints in OFFBOARD velocity mode (path A) | `b19901b004` | CI; GATE 1 bench pending |
 
-### F1.1 drivetrain — what `14e3fb88b2` does (verified in source + CI)
+Facts that changed the plan:
+- `uxrce_dds_client`, Ethernet and netman (fallback 10.41.10.2) are **already** in the v6x rover
+  build — `rover.px4board` is a variant of `default.px4board`. No board change was needed for DDS.
+- F1.6 board: WENC Kconfig is in; spray valve output deferred (parameter only).
+- F1.7 B2 decisions + explicit-control contract: `DYX_3WD/docs/contracts/F1.7_B2_firmware_decisions.md`.
+  Rows 15/16 close only after GATE 1 bench.
+- Defaults are flash-safe: `RBCLW_QPPS_MAX=0` (no motion), `EKF2_WENC_CTRL=0`,
+  `EKF2_GPS_YAW_G=0`. Keep WENC off until `EKF2_IMU_POS_*` is re-measured on the 6X mount.
 
-- RoboClaw Drive-With-Signed-Speed commands **35/36** (closed-loop QPPS on the RoboClaw's
-  encoders) replace open-loop opcodes 0/1/4/5 in `setMotorSpeed()`.
-- **`RBCLW_QPPS_MAX`**, default **0** — a fresh flash commands zero speed. Must be set to the
-  Motion Studio autotune max QPPS before the wheels will move.
-- `RBCLW_MAX1`/`RBCLW_MAX2` default **255** (was 256), so armed-zero lands exactly on center 128.
-- UART configured raw 8-bit binary mode.
-- Fresh local `fd_set` + `timeval` before every `select()`.
-- Zero-command deadbands: ~0.03 normalized in `updateOutputs()`, ~0.01 backstop in
-  `setMotorSpeed()`; input constrained to [-1, +1]; signed int32 QPPS sent big-endian via its
-  `uint32_t` bit pattern.
-- v1.17 `OutputModuleInterface` API unchanged (no `stop_motors` arg; disarm = mixer value 128).
-- **Not** ported: encoder timestamp (`1d82e616`, → F1.4), baud fallback (`b4fa9acf`), startup
-  retry (`bfe914ce`).
+**Still open for fine tracking** (from `PX4_DXP/docs/FIRMWARE_PENDING_PATCHES.md`, confirmed in
+v1.17): A1 RoboClaw serial never resyncs (no `tcflush`), A2 encoder-read decimation,
+**A9 WENC refreshes the global velocity-fusion timers (masks GNSS loss, blocks GSF yaw rescue —
+fix before enabling WENC)**, A6 no-slip constraint during pivots; GPS-driver submodule C2/C3/F7.
+C1/C4/F5 are resolved by dropping the always-landed land-detector patch.
+
+**GATE 2 replay how-to:** v1.16.2 logs need a byte-level `SensorGps` converter for v1.17
+replay (else zero GNSS fusion); replay is approximate-timestamp and run-to-run nondeterministic
+on every binary. Judge neutrality by `estimator_states` bit identity, not compare_ab "interior".
 
 ### ✅ The build-identification problem is solved, and proven
 
@@ -118,13 +124,14 @@ The 39 commits of the old v1.16.2 fork were audited: **13 must carry, 7 re-evalu
 `fmu-v6x/rover.px4board`.
 
 ```
-F1.1  drivetrain      RoboClaw QPPS, raw mode, creep, deadband   COMPLETE / CI VERIFIED / NOT FLASHED  (14e3fb88b2)
-F1.2  instrumentation logger topics                              NEXT  ← BEFORE the estimator work, or GATE 2 is unevaluable
-F1.3  estimator       WENC fusion + IMU lever arm                pending  ⟵ GATE 2
-F1.4  GNSS yaw        EKF2_GPS_YAW_N/_G + encoder timestamp      pending  ⟵ GATE 2
-F1.5  transport       DDS client on rover target + RTCM over DDS pending
-F1.6  board           px4_fmu-v6x_rover                          CI target switched (1416913c85); board-config changes pending
-F1.7  decisions       7 re-evaluate rows → one recorded decision each   pending
+F1.1  drivetrain      RoboClaw QPPS, raw mode, creep, deadband   DONE 14e3fb88b2
+F1.2  instrumentation logger topics                              DONE 385034b7ef + 809b3561c0
+F1.3  estimator       WENC fusion + IMU lever arm                DONE b5189bd734   GATE 2 passed
+F1.4  GNSS yaw        EKF2_GPS_YAW_N/_G + encoder timestamp      DONE 07bcfdc601 + 1cc5c364b8   GATE 2 passed
+F1.5  transport       DDS client on rover target + RTCM over DDS DONE 07741c2f26 (DDS client already on v6x rover) + C5 1bc34ef933
+F1.6  board           px4_fmu-v6x_rover                          DONE (1416913c85 target, WENC Kconfig in F1.3); spray pin deferred
+F1.7  decisions       B2 rows → recorded decisions + F1.7 gate   DONE b19901b004; rows 15/16 close at GATE 1 bench
+F1.8  optional        ULog streaming over DDS                    DONE 9f07777a32
 ```
 
 Two verified facts that shape F1.1 and F1.7:
