@@ -55,7 +55,7 @@ void DifferentialOffboardMode::offboardControl()
 	_offboard_control_mode_sub.copy(&offboard_control_mode);
 
 	trajectory_setpoint_s trajectory_setpoint{};
-	_trajectory_setpoint_sub.copy(&trajectory_setpoint);
+	const bool trajectory_setpoint_valid = _trajectory_setpoint_sub.copy(&trajectory_setpoint);
 
 	if (offboard_control_mode.position) {
 		rover_position_setpoint_s rover_position_setpoint{};
@@ -71,6 +71,16 @@ void DifferentialOffboardMode::offboardControl()
 
 	} else if (offboard_control_mode.velocity) {
 		const Vector2f velocity_ned(trajectory_setpoint.velocity[0], trajectory_setpoint.velocity[1]);
+
+		// Explicit rover setpoints: with no finite NED velocity in trajectory_setpoint, do not
+		// derive speed = |v| and yaw = atan2(vy, vx) from it. The external controller then
+		// publishes rover_speed_setpoint (signed) and rover_attitude_setpoint or, with a NaN
+		// yaw, rover_rate_setpoint directly, and the speed/attitude/rate controllers enabled
+		// by the velocity flag consume them unmodified.
+		if (!trajectory_setpoint_valid || !velocity_ned.isAllFinite()) {
+			return;
+		}
+
 		rover_speed_setpoint_s rover_speed_setpoint{};
 		rover_speed_setpoint.timestamp = hrt_absolute_time();
 		rover_speed_setpoint.speed_body_x = velocity_ned.norm();
