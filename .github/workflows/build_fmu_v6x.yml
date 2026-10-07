@@ -1,4 +1,4 @@
-name: Build px4_fmu-v6x_default
+name: Build px4_fmu-v6x_rover
 
 on:
   workflow_dispatch:
@@ -26,11 +26,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Build px4_fmu-v6x_default
-        run: make px4_fmu-v6x_default
+      - name: Build px4_fmu-v6x_rover
+        run: make px4_fmu-v6x_rover
 
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: px4_fmu-v6x_default_firmware
-          path: build/px4_fmu-v6x_default/px4_fmu-v6x_default.px4
+          name: px4_fmu-v6x_rover_firmware
+          path: build/px4_fmu-v6x_rover/px4_fmu-v6x_rover.px4
