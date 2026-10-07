@@ -19,6 +19,22 @@ Safety-critical C/C++. This file is the only preloaded context.
   future PX4 fixes selectively — never merge `upstream/main` wholesale).
 - Firmware: roadmap F1 code complete at `b19901b004` (2026-10-07). See "Current status".
 
+## ⛔ PX4 must not auto-configure the GNSS receiver (hard requirement, 2026-10-07)
+
+The UM982 owns its production configuration in its own persistent memory (`SAVECONFIG`).
+PX4 **only consumes** GNSS / heading data and **injects RTCM**. It must never send receiver
+configuration — not at boot, not on reconnect, not on heading loss.
+
+- **Current firmware violates this:** `GPSDriverNMEA::request_unicore_messages()`
+  (`src/drivers/gps/devices/src/nmea.cpp:1053`, called at `:996`) writes 6 unsaved log commands
+  (`GPGGA`, `UNIAGRICA`, `UNIHEADINGA` @ 0.2 s; `GPGST`, `GPGSA`, `GPRMC` @ 1 s) whenever heading
+  has been missing > 1 s. Required fix: remove/disable that call, in the GPS-driver submodule
+  (`PX4-GPSDrivers`) — needs a submodule fork. No production parameter may re-enable it.
+- Compliant today: RTCM injection (`gps.cpp:625`); `configure()` only probes PX4's own baud.
+- Open GNSS fixes (C2 restart cycle, C3 config spam, F7 variance-as-σ) are judged under this
+  rule: **never fix a reconnect/timeout/heading-loss problem by reconfiguring the receiver.**
+- Receiver message set/rates to store, and acceptance test: `DYX_3WD/docs/contracts/GNSS_receiver_configuration.md`.
+
 ## ⚠ How this repo differs from the 4WD baseline
 
 `PX4-Autopilot-4WD-Prod-Baseline` stays pristine. **This one does not.** It is the vehicle for
@@ -80,6 +96,15 @@ Facts that changed the plan:
   Rows 15/16 close only after GATE 1 bench.
 - Defaults are flash-safe: `RBCLW_QPPS_MAX=0` (no motion), `EKF2_WENC_CTRL=0`,
   `EKF2_GPS_YAW_G=0`. Keep WENC off until `EKF2_IMU_POS_*` is re-measured on the 6X mount.
+
+**Since the F1 batch:** A1 RoboClaw RX resync `420768d812`, A2 speed-only encoder reads
+(`wheel_angle` NaN) `4eb9465e3c` — both CI green, archived; **`4eb9465e3c` is the current flash
+candidate**. A9 (WENC must not refresh global velocity-fusion timers) is **HELD**: neutral in
+replay but its mechanism was never observed and `_time_last_hor_vel_fuse` also drives
+dead-reckoning classification — patch in the working tree + `PX4-Firmware/3WD/_held_patches/`.
+Heading-fault recovery (replay): inherent EKF2 reset-on-continuous-rejection logic, identical in
+v1.16.2 / stock v1.17 / current; a mostly-accepted heading fault can persist ~190 s unflagged —
+mitigate in the companion (`reject_yaw`, GNSS-yaw test ratio).
 
 **Still open for fine tracking** (from `PX4_DXP/docs/FIRMWARE_PENDING_PATCHES.md`, confirmed in
 v1.17): A1 RoboClaw serial never resyncs (no `tcflush`), A2 encoder-read decimation,
