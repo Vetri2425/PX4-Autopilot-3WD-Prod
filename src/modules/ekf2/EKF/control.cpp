@@ -147,6 +147,11 @@ void Ekf::controlFusionModes(const imuSample &imu_delayed)
 	controlAuxVelFusion(imu_delayed);
 #endif // CONFIG_EKF2_AUXVEL
 
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+	// Body-frame velocity data from wheel encoders can be fused (ground rover)
+	controlWheelEncoderFusion(imu_delayed);
+#endif // CONFIG_EKF2_WHEEL_ENCODER
+
 #if defined(CONFIG_EKF2_TERRAIN)
 	controlTerrainFakeFusion();
 	updateTerrainValidity();

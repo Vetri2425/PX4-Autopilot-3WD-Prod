@@ -260,6 +260,14 @@ struct auxVelSample {
 };
 #endif // CONFIG_EKF2_AUXVEL
 
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+struct wheelEncoderSample {
+	uint64_t time_us{};        ///< timestamp of the measurement (uSec)
+	float    vel_body_fwd{};   ///< measured body-frame forward (body-X) velocity (m/sec)
+	float    vel_fwd_var{};    ///< estimated error variance of the forward velocity ((m/sec)**2)
+};
+#endif // CONFIG_EKF2_WHEEL_ENCODER
+
 struct systemFlagUpdate {
 	uint64_t time_us{};
 	bool at_rest{false};
@@ -503,6 +511,16 @@ struct parameters {
 	const float auxvel_noise{0.5f};         ///< minimum observation noise, uses reported noise if greater (m/s)
 	const float auxvel_gate{5.0f};          ///< velocity fusion innovation consistency gate size (STD)
 #endif // CONFIG_EKF2_AUXVEL
+
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+	// wheel encoder body-frame velocity fusion (ground rover)
+	int32_t ekf2_wenc_ctrl{0};              ///< wheel encoder fusion enable (0: disabled, 1: enabled)
+	float ekf2_wenc_rad{0.0f};              ///< effective wheel rolling radius; 0 keeps fusion disabled until calibrated (m)
+	float ekf2_wenc_delay{5.0f};            ///< wheel encoder measurement delay relative to the IMU (mSec)
+	float ekf2_wenc_noise{0.1f};            ///< observation noise of the forward velocity (m/s)
+	float ekf2_wenc_lat_n{0.1f};            ///< observation noise of the body-lateral (side-slip) zero-velocity constraint (m/s)
+	float ekf2_wenc_gate{5.0f};             ///< velocity fusion innovation consistency gate size (STD)
+#endif // CONFIG_EKF2_WHEEL_ENCODER
 
 };
 

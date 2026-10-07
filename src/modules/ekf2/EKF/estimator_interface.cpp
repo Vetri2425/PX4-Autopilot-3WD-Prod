@@ -73,6 +73,9 @@ EstimatorInterface::~EstimatorInterface()
 #if defined(CONFIG_EKF2_AUXVEL)
 	delete _auxvel_buffer;
 #endif // CONFIG_EKF2_AUXVEL
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+	delete _wheel_encoder_buffer;
+#endif // CONFIG_EKF2_WHEEL_ENCODER
 }
 
 // Accumulate imu data and store to buffer at desired rate
@@ -436,6 +439,44 @@ void EstimatorInterface::setAuxVelData(const auxVelSample &auxvel_sample)
 	}
 }
 #endif // CONFIG_EKF2_AUXVEL
+
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+void EstimatorInterface::setWheelEncoderData(const wheelEncoderSample &wheel_encoder_sample)
+{
+	if (!_initialised) {
+		return;
+	}
+
+	// Allocate the required buffer size if not previously done
+	if (_wheel_encoder_buffer == nullptr) {
+		_wheel_encoder_buffer = new RingBuffer<wheelEncoderSample>(_obs_buffer_length);
+
+		if (_wheel_encoder_buffer == nullptr || !_wheel_encoder_buffer->valid()) {
+			delete _wheel_encoder_buffer;
+			_wheel_encoder_buffer = nullptr;
+			printBufferAllocationFailed("wheel encoder");
+			return;
+		}
+	}
+
+	const int64_t time_us = wheel_encoder_sample.time_us
+				- static_cast<int64_t>(_params.ekf2_wenc_delay * 1000)
+				- static_cast<int64_t>(_dt_ekf_avg * 5e5f); // seconds to microseconds divided by 2
+
+	// limit data rate to prevent data being lost
+	if (time_us >= static_cast<int64_t>(_wheel_encoder_buffer->get_newest().time_us + _min_obs_interval_us)) {
+
+		wheelEncoderSample wheel_encoder_sample_new{wheel_encoder_sample};
+		wheel_encoder_sample_new.time_us = time_us;
+
+		_wheel_encoder_buffer->push(wheel_encoder_sample_new);
+
+	} else {
+		ECL_WARN("wheel encoder data too fast %" PRIi64 " < %" PRIu64 " + %d", time_us,
+			 _wheel_encoder_buffer->get_newest().time_us, _min_obs_interval_us);
+	}
+}
+#endif // CONFIG_EKF2_WHEEL_ENCODER
 
 void EstimatorInterface::setSystemFlagData(const systemFlagUpdate &system_flags)
 {

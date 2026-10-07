@@ -70,6 +70,14 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 #if defined(CONFIG_EKF2_AUXVEL)
 	_param_ekf2_avel_delay(_params->ekf2_avel_delay),
 #endif // CONFIG_EKF2_AUXVEL
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+	_param_ekf2_wenc_ctrl(_params->ekf2_wenc_ctrl),
+	_param_ekf2_wenc_rad(_params->ekf2_wenc_rad),
+	_param_ekf2_wenc_delay(_params->ekf2_wenc_delay),
+	_param_ekf2_wenc_noise(_params->ekf2_wenc_noise),
+	_param_ekf2_wenc_lat_n(_params->ekf2_wenc_lat_n),
+	_param_ekf2_wenc_gate(_params->ekf2_wenc_gate),
+#endif // CONFIG_EKF2_WHEEL_ENCODER
 	_param_ekf2_gyr_noise(_params->ekf2_gyr_noise),
 	_param_ekf2_acc_noise(_params->ekf2_acc_noise),
 	_param_ekf2_gyr_b_noise(_params->ekf2_gyr_b_noise),
@@ -778,6 +786,9 @@ void EKF2::Run()
 #if defined(CONFIG_EKF2_AUXVEL)
 		UpdateAuxVelSample(ekf2_timestamps);
 #endif // CONFIG_EKF2_AUXVEL
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+		UpdateWheelEncoderSample(ekf2_timestamps);
+#endif // CONFIG_EKF2_WHEEL_ENCODER
 #if defined(CONFIG_EKF2_BAROMETER)
 		UpdateBaroSample(ekf2_timestamps);
 #endif // CONFIG_EKF2_BAROMETER
@@ -896,6 +907,14 @@ void EKF2::VerifyParams()
 	}
 
 #endif // CONFIG_EKF2_AUXVEL
+
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+
+	if (_param_ekf2_wenc_delay.get() > delay_max) {
+		delay_max = _param_ekf2_wenc_delay.get();
+	}
+
+#endif // CONFIG_EKF2_WHEEL_ENCODER
 
 #if defined(CONFIG_EKF2_BAROMETER)
 
@@ -1025,6 +1044,12 @@ void EKF2::PublishAidSourceStatus(const hrt_abstime &timestamp)
 	// aux velocity
 	PublishAidSourceStatus(timestamp, _ekf.aid_src_aux_vel(), _status_aux_vel_pub_last, _estimator_aid_src_aux_vel_pub);
 #endif // CONFIG_EKF2_AUXVEL
+
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+	// wheel encoder body-frame velocity
+	PublishAidSourceStatus(timestamp, _ekf.aid_src_wheel_encoder(), _status_wheel_encoder_pub_last,
+			       _estimator_aid_src_wheel_encoder_pub);
+#endif // CONFIG_EKF2_WHEEL_ENCODER
 
 #if defined(CONFIG_EKF2_OPTICAL_FLOW)
 	// optical flow
@@ -2161,6 +2186,40 @@ void EKF2::UpdateAuxVelSample(ekf2_timestamps_s &ekf2_timestamps)
 	}
 }
 #endif // CONFIG_EKF2_AUXVEL
+
+#if defined(CONFIG_EKF2_WHEEL_ENCODER)
+void EKF2::UpdateWheelEncoderSample(ekf2_timestamps_s &ekf2_timestamps)
+{
+	// EKF wheel-encoder body-frame velocity sample (ground rover).
+	//  - converts the driver's wheel speeds (rad/s) to a forward (body-X) velocity
+	//  - disabled unless explicitly enabled and a valid (>0) wheel radius is configured
+	if (_param_ekf2_wenc_ctrl.get() == 0 || !(_param_ekf2_wenc_rad.get() > 0.f)) {
+		return;
+	}
+
+	wheel_encoders_s wheel_encoders;
+
+	if (_wheel_encoders_sub.update(&wheel_encoders)) {
+		const float radius = _param_ekf2_wenc_rad.get();
+
+		// Differential-drive forward speed: average of the two driven wheels.
+		// wheel_speed[0] = right, wheel_speed[1] = left (rad/s); the third wheel is a passive caster.
+		const float v_fwd = 0.5f * (wheel_encoders.wheel_speed[0] + wheel_encoders.wheel_speed[1]) * radius;
+
+		if (!PX4_ISFINITE(v_fwd)) {
+			return;
+		}
+
+		wheelEncoderSample wheel_encoder_sample{
+			.time_us = wheel_encoders.timestamp,
+			.vel_body_fwd = v_fwd,
+			.vel_fwd_var = sq(math::max(_param_ekf2_wenc_noise.get(), 0.01f)),
+		};
+
+		_ekf.setWheelEncoderData(wheel_encoder_sample);
+	}
+}
+#endif // CONFIG_EKF2_WHEEL_ENCODER
 
 #if defined(CONFIG_EKF2_BAROMETER)
 void EKF2::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)

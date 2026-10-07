@@ -45,6 +45,13 @@ depends on MODULES_EKF2
 	---help---
 		EKF2 auxiliary velocity fusion support.
 
+menuconfig EKF2_WHEEL_ENCODER
+depends on MODULES_EKF2
+        bool "wheel encoder velocity fusion support"
+        default n
+	---help---
+		EKF2 wheel-encoder body-frame velocity fusion support (ground rovers).
+
 menuconfig EKF2_BAROMETER
 depends on MODULES_EKF2
 	bool "barometer support"
