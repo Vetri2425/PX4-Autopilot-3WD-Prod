@@ -23,7 +23,7 @@ Safety-critical C/C++. This file is the only preloaded context.
 
 `PX4-Autopilot-4WD-Prod-Baseline` stays pristine. **This one does not.** It is the vehicle for
 re-anchoring the 3WD rover patch set from v1.16.2 onto v1.17.0 — see
-`Way_to_Mark/DYX_3WD/docs/architecture/DYX_3WD_Production_Stack_Architecture_V1.md`, Track F.
+`3WD_PROD/DYX_3WD/docs/architecture/DYX_3WD_Production_Stack_Architecture_V1.md`, Track F.
 
 ⛔ **Never `cp`-overlay files in CI.** The old 3WD firmware
 (`Vetri2425/PX4-Autopilot` + `build_rover.yml`) copied 27 fork files onto a clean v1.16.2
@@ -59,7 +59,7 @@ default parameters — not "it builds".
 |---|---|
 | HEAD | `f3de5d1ccd` — `ci(build): add px4_fmu-v6x_default build workflow` |
 | First build | ✅ green, 5m47s, [run 33914115176](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/33914115176) |
-| Artifact | `Way_to_Mark/PX4-Firmware/3WD/f3de5d1ccd-ci-build-add-px4-fmu-v6x-default-build-workflow/` |
+| Artifact | `3WD_PROD/PX4-Firmware/3WD/f3de5d1ccd-ci-build-add-px4-fmu-v6x-default-build-workflow/` |
 | Workflows | 1 active (`Build px4_fmu-v6x_default`), **27 disabled** via `gh workflow disable` |
 | Target | `px4_fmu-v6x_default` — the `_rover` target is the natural first F1 switch |
 
@@ -152,14 +152,14 @@ gh run download <run-id> --repo Vetri2425/PX4-Autopilot-3WD-Prod --dir /tmp/dl
 After every successful build, copy the `.px4` into:
 
 ```
-Way_to_Mark/PX4-Firmware/3WD/<short-sha>-<slugified-commit-message>/
+3WD_PROD/PX4-Firmware/3WD/<short-sha>-<slugified-commit-message>/
   px4_fmu-v6x_default.px4
   build_info.txt   # SHA, branch, message, target, CI run URL
 ```
 
 One subfolder per successful build — **never overwrite a prior build's folder.**
 
-Builds are namespaced **per vehicle**: `PX4-Firmware/3WD/` here, `PX4-Firmware/4WD/` for
+Builds are namespaced **per vehicle**: `3WD_PROD/PX4-Firmware/3WD/` here, `Way_to_Mark/PX4-Firmware/4WD/` for
 `Vetri2425/PX4-Autopilot-4WD-Prod-Baseline`. Both vehicles pin the same base (`v1.17.0` ==
 `d6f12ad1c4`) and build the same target name, so a flat archive would be ambiguous.
 
