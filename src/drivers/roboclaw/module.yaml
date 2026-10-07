@@ -12,7 +12,7 @@ actuator_output:
       standard_params:
         disarmed: { min: 128, max: 128, default: 128 }
         min: { min: 1, max: 128, default: 1 }
-        max: { min: 128, max: 256, default: 256 }
+        max: { min: 128, max: 256, default: 255 }
         failsafe: { min: 0, max: 257 }
       num_channels: 2
 
@@ -26,6 +26,17 @@ parameters:
         type: int32
         default: 1200
         min: 1
+      RBCLW_QPPS_MAX:
+        description:
+          short: Max wheel speed in encoder counts per second at full output
+          long: |
+            Maps the normalized motor command (+/-1) to a RoboClaw closed-loop
+            velocity (QPPS) target. Set this to the per-motor max QPPS reported by
+            BasicMicro Motion Studio velocity autotune. The default of 0 commands
+            zero speed, so a freshly flashed vehicle cannot move until configured.
+        type: int32
+        default: 0
+        min: 0
       RBCLW_ADDRESS:
         description:
           short: Address of the ESC on the bus

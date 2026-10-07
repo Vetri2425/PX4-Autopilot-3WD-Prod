@@ -95,6 +95,8 @@ private:
 		DriveBackwardsMotor2 = 5,
 		DutyCycleMotor1 = 32,
 		DutyCycleMotor2 = 33,
+		DriveSpeedMotor1 = 35, // Drive M1 With Signed Speed (4-byte signed QPPS, big-endian)
+		DriveSpeedMotor2 = 36, // Drive M2 With Signed Speed (4-byte signed QPPS, big-endian)
 
 		ReadSpeedMotor1 = 18,
 		ReadSpeedMotor2 = 19,
@@ -114,6 +116,7 @@ private:
 
 	void sendUnsigned7Bit(Command command, float data);
 	void sendSigned16Bit(Command command, float data);
+	void sendSigned32Bit(Command command, int32_t value);
 
 	// Roboclaw protocol
 	int sendTransaction(Command cmd, uint8_t *write_buffer, size_t bytes_to_write);
@@ -136,6 +139,7 @@ private:
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::RBCLW_ADDRESS>) _param_rbclw_address,
-		(ParamInt<px4::params::RBCLW_COUNTS_REV>) _param_rbclw_counts_rev
+		(ParamInt<px4::params::RBCLW_COUNTS_REV>) _param_rbclw_counts_rev,
+		(ParamInt<px4::params::RBCLW_QPPS_MAX>) _param_rbclw_qpps_max
 	)
 };

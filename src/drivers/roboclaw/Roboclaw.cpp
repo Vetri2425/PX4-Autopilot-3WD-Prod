@@ -123,6 +123,13 @@ int Roboclaw::initializeUART()
 	uart_config.c_oflag &= ~ONLCR; // no CR for every LF
 	uart_config.c_cflag &= ~CRTSCTS;
 
+	// Raw 8-bit mode: the RoboClaw packet serial protocol is binary
+	uart_config.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+	uart_config.c_oflag &= ~OPOST;
+	uart_config.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+	uart_config.c_cflag &= ~(CSIZE | PARENB);
+	uart_config.c_cflag |= CS8;
+
 	// Set baud rate
 	ret = cfsetispeed(&uart_config, baud_rate_posix);
 
@@ -159,6 +166,18 @@ bool Roboclaw::updateOutputs(uint16_t outputs[MAX_ACTUATORS],
 {
 	float right_motor_output = ((float)outputs[0] - 128.0f) / 127.f;
 	float left_motor_output = ((float)outputs[1] - 128.0f) / 127.f;
+
+	// Deadband around the zero point (128): a 1-count mixer bias would otherwise
+	// become a steady creep in closed-loop velocity mode with a high RBCLW_QPPS_MAX
+	static constexpr float DEADBAND = 0.03f; // ~3.8 counts
+
+	if (fabsf(right_motor_output) < DEADBAND) {
+		right_motor_output = 0.f;
+	}
+
+	if (fabsf(left_motor_output) < DEADBAND) {
+		left_motor_output = 0.f;
+	}
 
 	setMotorSpeed(Motor::Right, right_motor_output);
 	setMotorSpeed(Motor::Left, left_motor_output);
@@ -240,30 +259,23 @@ int Roboclaw::readEncoder()
 
 void Roboclaw::setMotorSpeed(Motor motor, float value)
 {
-	Command command;
+	// Closed-loop velocity control on the RoboClaw's encoders: map the normalized
+	// command [-1, 1] to a signed QPPS target using RBCLW_QPPS_MAX
+	value = math::constrain(value, -1.f, 1.f);
 
-	// send command
-	if (motor == Motor::Right) {
-		if (value > 0) {
-			command = Command::DriveForwardMotor1;
-
-		} else {
-			command = Command::DriveBackwardsMotor1;
-		}
-
-	} else if (motor == Motor::Left) {
-		if (value > 0) {
-			command = Command::DriveForwardMotor2;
-
-		} else {
-			command = Command::DriveBackwardsMotor2;
-		}
-
-	} else {
-		return;
+	// Treat anything below ~1% command as a true stop
+	if (fabsf(value) < 0.01f) {
+		value = 0.f;
 	}
 
-	sendUnsigned7Bit(command, value);
+	const int32_t qpps = static_cast<int32_t>(value * static_cast<float>(_param_rbclw_qpps_max.get()));
+
+	if (motor == Motor::Right) {
+		sendSigned32Bit(Command::DriveSpeedMotor1, qpps);
+
+	} else if (motor == Motor::Left) {
+		sendSigned32Bit(Command::DriveSpeedMotor2, qpps);
+	}
 }
 
 void Roboclaw::setMotorDutyCycle(Motor motor, float value)
@@ -310,6 +322,19 @@ void Roboclaw::sendSigned16Bit(Command command, float data)
 	sendTransaction(command, (uint8_t *) &buff, 2);
 }
 
+void Roboclaw::sendSigned32Bit(Command command, int32_t value)
+{
+	const uint32_t raw = static_cast<uint32_t>(value);
+
+	uint8_t buff[4];
+	buff[0] = static_cast<uint8_t>((raw >> 24) & 0xFFu);
+	buff[1] = static_cast<uint8_t>((raw >> 16) & 0xFFu);
+	buff[2] = static_cast<uint8_t>((raw >> 8) & 0xFFu);
+	buff[3] = static_cast<uint8_t>(raw & 0xFFu);
+
+	sendTransaction(command, buff, sizeof(buff));
+}
+
 int Roboclaw::sendTransaction(Command cmd, uint8_t *write_buffer, size_t bytes_to_write)
 {
 	if (writeCommandWithPayload(cmd, write_buffer, bytes_to_write) != OK) {
@@ -352,7 +377,12 @@ int Roboclaw::writeCommandWithPayload(Command command, uint8_t *wbuff, size_t by
 
 int Roboclaw::readAcknowledgement()
 {
-	int select_status = select(_uart_fd + 1, &_uart_fd_set, nullptr, nullptr, &_uart_fd_timeout);
+	fd_set read_fds;
+	FD_ZERO(&read_fds);
+	FD_SET(_uart_fd, &read_fds);
+	struct timeval timeout = _uart_fd_timeout; // select() may modify both arguments
+
+	int select_status = select(_uart_fd + 1, &read_fds, nullptr, nullptr, &timeout);
 
 	if (select_status <= 0) {
 		PX4_ERR("ACK timeout");
@@ -402,7 +432,12 @@ int Roboclaw::readResponse(Command command, uint8_t *read_buffer, size_t bytes_t
 	size_t total_bytes_read = 0;
 
 	while (total_bytes_read < bytes_to_read) {
-		int select_status = select(_uart_fd + 1, &_uart_fd_set, nullptr, nullptr, &_uart_fd_timeout);
+		fd_set read_fds;
+		FD_ZERO(&read_fds);
+		FD_SET(_uart_fd, &read_fds);
+		struct timeval timeout = _uart_fd_timeout; // select() may modify both arguments
+
+		int select_status = select(_uart_fd + 1, &read_fds, nullptr, nullptr, &timeout);
 
 		if (select_status <= 0) {
 			PX4_ERR("Select timeout %d\n", select_status);
