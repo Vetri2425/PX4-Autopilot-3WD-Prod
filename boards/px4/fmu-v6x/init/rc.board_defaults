@@ -21,8 +21,9 @@ param set-default SENS_EN_INA238 0
 param set-default SENS_EN_INA228 0
 param set-default SENS_EN_INA226 0
 
-# Mavlink ethernet (CFG 1000)
-param set-default MAV_2_CONFIG 1000
+# Jetson <-> PX4 is Ethernet + uXRCE-DDS only: no MAVLink instance on Ethernet.
+# QGC, parameters and flashing go over USB (maintenance interface).
+param set-default MAV_2_CONFIG 0
 param set-default MAV_2_BROADCAST 1
 param set-default MAV_2_MODE 0
 param set-default MAV_2_RADIO_CTL 0
