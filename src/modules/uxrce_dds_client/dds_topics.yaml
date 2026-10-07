@@ -226,3 +226,8 @@ subscriptions:
 
 # Create uORB::PublicationMulti
 subscriptions_multi:
+  # RTCM corrections from the companion. Multi-instance so it never shares a uORB
+  # instance with MAVLink's GPS_RTCM_DATA publisher; the GPS driver selects one
+  # instance. The sender must fragment frames > 300 bytes and set the flags LSB.
+  - topic: /fmu/in/gps_inject_data
+    type: px4_msgs::msg::GpsInjectData
