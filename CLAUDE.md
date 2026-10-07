@@ -13,11 +13,12 @@ Safety-critical C/C++. This file is the only preloaded context.
   Verified `git describe --tags` == `v1.17.0` exactly (not RC/beta); present on `release/1.17`
   and `stable`, not `main`. Same pinned base as the 4WD repo.
 - **Production branch:** `dyx-3wd-production`, branched from the pinned commit.
-- **Target hardware:** Pixhawk 6X — currently building `px4_fmu-v6x_default`.
+- **Target hardware:** Pixhawk 6X — production CI target is **`px4_fmu-v6x_rover`**
+  (switched from `px4_fmu-v6x_default` in `1416913c85`).
 - **Upstream remote:** `upstream` → `https://github.com/PX4/PX4-Autopilot.git` (for reviewing
   future PX4 fixes selectively — never merge `upstream/main` wholesale).
-- First commit adds CI only. No firmware source, drivers, DDS topics, parameters or board
-  config modified yet.
+- Firmware changes so far: F1.1 RoboClaw drivetrain only (`14e3fb88b2`). No EKF2, DDS topic,
+  logger or board-config changes yet.
 
 ## ⚠ How this repo differs from the 4WD baseline
 
@@ -36,12 +37,12 @@ Re-anchor by diffing each overlaid file against its **v1.16.2 stock ancestor** a
 that semantic diff — never by copying the v1.16.2 file onto v1.17.0. EKF2 is not a stable API
 across 1.16 → 1.17: `common.h`, `ekf.h` and `control.cpp` all moved.
 
-### Planned patch set (Track F1 — none applied yet)
+### Planned patch set (Track F1 — F1.1 drivetrain applied, rest pending)
 
 | Patch | Origin | Notes |
 |---|---|---|
 | EKF2 wheel-encoder fusion (13 files) | `255453d967` lever-arm fix | **Not upstream in v1.17.** Field-verified: pivot wobble 1.52 → 0.50 cm median, net walk 2.02 → 0.83 cm, 34 ulogs. |
-| RoboClaw QPPS + timestamp fix | `1d82e616f8` | Timestamp taken *before* the UART transaction; closes ~264 ms jitter into WENC fusion. `src/drivers/roboclaw` **does** exist in v1.17. |
+| RoboClaw QPPS + timestamp fix | `1d82e616f8` | **QPPS half done in F1.1 (`14e3fb88b2`).** Timestamp half still pending (F1.4): taken *before* the UART transaction; closes ~264 ms jitter into WENC fusion. |
 | GNSS-yaw innovation floor | `015c67484e` + `a6e9e12e2a` | Adds `EKF2_GPS_YAW_N` + `EKF2_GPS_YAW_G`. Neither is upstream — v1.17 has only `EKF2_GPS_YAW_OFF`. |
 | Logger topics | `9641ea9a99`, `53940ead83` | `wheel_encoders`, `estimator_aid_src_wheel_encoder` from cold boot. |
 | `rover.px4board` | new | Add `CONFIG_MODULES_UXRCE_DDS_CLIENT=y` — **absent from every stock `rover.px4board`**. |
@@ -51,17 +52,38 @@ across 1.16 → 1.17: `common.h`, `ekf.h` and `control.cpp` all moved.
 corpus *before* flashing. Pass criterion is decision-identical `estimator_aid_src_*` output at
 default parameters — not "it builds".
 
-## Current status — 2026-09-05
+## Current status — 2026-10-07
 
-**Pristine v1.17.0 + CI only. No rover patches applied.**
+**v1.17.0 + CI (rover target) + F1.1 RoboClaw drivetrain. Nothing else applied.**
+
+⚠ **THIS ARTIFACT HAS NOT BEEN FLASHED OR HARDWARE-VALIDATED YET.** "CI green" proves it
+compiles and links; it says nothing about motor behaviour on the vehicle.
 
 | | |
 |---|---|
-| HEAD | `f3de5d1ccd` — `ci(build): add px4_fmu-v6x_default build workflow` |
-| First build | ✅ green, 5m47s, [run 33914115176](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/33914115176) |
-| Artifact | `3WD_PROD/PX4-Firmware/3WD/f3de5d1ccd-ci-build-add-px4-fmu-v6x-default-build-workflow/` |
-| Workflows | 1 active (`Build px4_fmu-v6x_default`), **27 disabled** via `gh workflow disable` |
-| Target | `px4_fmu-v6x_default` — the `_rover` target is the natural first F1 switch |
+| HEAD | `14e3fb88b2` — `feat(roboclaw): add closed-loop QPPS drivetrain control` |
+| CI workflow | `.github/workflows/build_fmu_v6x.yml` → `make px4_fmu-v6x_rover` |
+| CI target switch | `1416913c85` — `ci(build): switch 3WD production CI to fmu-v6x rover` ([run 37590295682](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/37590295682), green; stock open-loop RoboClaw, not a field candidate) |
+| F1.1 build | ✅ green, [run 37591482228](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/37591482228) — `Roboclaw.cpp` compiled, 0 compiler warnings |
+| F1.1 memory | FLASH 1,784,812 B / 1920 KB = **90.78%** · AXI_SRAM 100,700 B / 512 KB = **19.21%** · SRAM4 2 KB / 64 KB = 3.12% (+272 B FLASH vs `1416913c85`) |
+| Artifact | `3WD_PROD/PX4-Firmware/3WD/14e3fb88b2-feat-roboclaw-add-closed-loop-qpps-drivetrain-control/` — **production candidate, NOT FLASHED** |
+| Workflows | 1 active (`Build px4_fmu-v6x_rover`), **27 disabled** via `gh workflow disable` |
+
+### F1.1 drivetrain — what `14e3fb88b2` does (verified in source + CI)
+
+- RoboClaw Drive-With-Signed-Speed commands **35/36** (closed-loop QPPS on the RoboClaw's
+  encoders) replace open-loop opcodes 0/1/4/5 in `setMotorSpeed()`.
+- **`RBCLW_QPPS_MAX`**, default **0** — a fresh flash commands zero speed. Must be set to the
+  Motion Studio autotune max QPPS before the wheels will move.
+- `RBCLW_MAX1`/`RBCLW_MAX2` default **255** (was 256), so armed-zero lands exactly on center 128.
+- UART configured raw 8-bit binary mode.
+- Fresh local `fd_set` + `timeval` before every `select()`.
+- Zero-command deadbands: ~0.03 normalized in `updateOutputs()`, ~0.01 backstop in
+  `setMotorSpeed()`; input constrained to [-1, +1]; signed int32 QPPS sent big-endian via its
+  `uint32_t` bit pattern.
+- v1.17 `OutputModuleInterface` API unchanged (no `stop_motors` arg; disarm = mixer value 128).
+- **Not** ported: encoder timestamp (`1d82e616`, → F1.4), baud fallback (`b4fa9acf`), startup
+  retry (`bfe914ce`).
 
 ### ✅ The build-identification problem is solved, and proven
 
@@ -88,7 +110,7 @@ on it is what created the duplicate.
 `paths-ignore` is confirmed working: the `CLAUDE.md`-only commits `c0e429d918` and
 `ac2e9173a2` triggered no run at all.
 
-### Next: F1, per `DYX_3WD/docs/Firmware/F-tasks.md`
+### F1 progress, per `DYX_3WD/docs/Firmware/F-tasks.md`
 
 The 39 commits of the old v1.16.2 fork were audited: **13 must carry, 7 re-evaluate,
 19 drop**. Roughly half does not survive — mostly CI scaffolding for the abolished
@@ -96,19 +118,19 @@ The 39 commits of the old v1.16.2 fork were audited: **13 must carry, 7 re-evalu
 `fmu-v6x/rover.px4board`.
 
 ```
-F1.1  drivetrain      RoboClaw QPPS, raw mode, creep, deadband
-F1.2  instrumentation logger topics  ← BEFORE the estimator work, or GATE 2 is unevaluable
-F1.3  estimator       WENC fusion + IMU lever arm            ⟵ GATE 2
-F1.4  GNSS yaw        EKF2_GPS_YAW_N/_G + encoder timestamp  ⟵ GATE 2
-F1.5  transport       DDS client on rover target + RTCM over DDS
-F1.6  board           px4_fmu-v6x_rover
-F1.7  decisions       7 re-evaluate rows → one recorded decision each
+F1.1  drivetrain      RoboClaw QPPS, raw mode, creep, deadband   COMPLETE / CI VERIFIED / NOT FLASHED  (14e3fb88b2)
+F1.2  instrumentation logger topics                              NEXT  ← BEFORE the estimator work, or GATE 2 is unevaluable
+F1.3  estimator       WENC fusion + IMU lever arm                pending  ⟵ GATE 2
+F1.4  GNSS yaw        EKF2_GPS_YAW_N/_G + encoder timestamp      pending  ⟵ GATE 2
+F1.5  transport       DDS client on rover target + RTCM over DDS pending
+F1.6  board           px4_fmu-v6x_rover                          CI target switched (1416913c85); board-config changes pending
+F1.7  decisions       7 re-evaluate rows → one recorded decision each   pending
 ```
 
 Two verified facts that shape F1.1 and F1.7:
-- **The RoboClaw QPPS patch is still needed.** v1.17's `setMotorSpeed()` still sends
-  `DriveForwardMotor1` via `sendUnsigned7Bit` — open-loop. Upstream's entire
-  v1.16.2→v1.17 diff for that driver is 4 insertions / 10 deletions.
+- **The RoboClaw QPPS patch was needed — now applied in F1.1 (`14e3fb88b2`).** Stock v1.17's
+  `setMotorSpeed()` sent `DriveForwardMotor1` via `sendUnsigned7Bit` — open-loop. Upstream's
+  entire v1.16.2→v1.17 diff for that driver is 4 insertions / 10 deletions.
 - **Two rows must not be re-applied blind.** `RoverLandDetector` grew waypoint-distance
   logic upstream, and `mission_block.cpp` now has `VEHICLE_TYPE_ROVER` handling at line
   213 that v1.16.2 lacked.
@@ -153,7 +175,7 @@ After every successful build, copy the `.px4` into:
 
 ```
 3WD_PROD/PX4-Firmware/3WD/<short-sha>-<slugified-commit-message>/
-  px4_fmu-v6x_default.px4
+  px4_fmu-v6x_rover.px4     # px4_fmu-v6x_default.px4 for builds before 1416913c85
   build_info.txt   # SHA, branch, message, target, CI run URL
 ```
 
@@ -171,6 +193,11 @@ Preserve the naming.
 stalls on PX4's larger submodules (`Tools/simulation/*`), which GitHub's runners do not hit.
 CI is the only build path. To inspect submodule source, `git submodule update --init <path>`
 one at a time, never `--recursive`.
+
+**No local production builds — the CI artifact is authoritative.** On 2026-10-07 a one-off local
+compile check of `px4_fmu-v6x_rover` was run during F1.1 (Homebrew gcc 9-2020-q2, not the pinned
+container), which initialized 12 non-simulation submodules and created the git-ignored `build/`
+here. That build is **not** an artifact and must never be flashed or archived.
 
 ## Commit rules
 
