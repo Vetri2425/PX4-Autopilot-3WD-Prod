@@ -43,7 +43,8 @@
 #include "ekf_derivation/generated/compute_body_vel_z_innov_var.h"
 
 void Ekf::fuseBodyFrameVelocity(estimator_aid_source3d_s &aid_src, const uint64_t &timestamp,
-				const Vector3f &measurement, const Vector3f &measurement_var, const float &innovation_gate)
+				const Vector3f &measurement, const Vector3f &measurement_var, const float &innovation_gate,
+				const bool update_vel_fuse_timestamps)
 {
 	VectorState H[3];
 	Vector3f innov_var;
@@ -77,7 +78,9 @@ void Ekf::fuseBodyFrameVelocity(estimator_aid_source3d_s &aid_src, const uint64_
 		aid_src.fused = true;
 		aid_src.time_last_fuse = _time_delayed_us;
 
-		_time_last_hor_vel_fuse = _time_delayed_us;
-		_time_last_ver_vel_fuse = _time_delayed_us;
+		if (update_vel_fuse_timestamps) {
+			_time_last_hor_vel_fuse = _time_delayed_us;
+			_time_last_ver_vel_fuse = _time_delayed_us;
+		}
 	}
 }

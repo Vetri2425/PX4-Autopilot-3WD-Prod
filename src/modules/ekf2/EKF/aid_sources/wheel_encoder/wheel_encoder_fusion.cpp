@@ -107,8 +107,12 @@ void Ekf::controlWheelEncoderFusion(const imuSample &imu_sample)
 							       sq(_params.ekf2_wenc_lat_n),
 							       sq(1000.f));
 
+				// Do not refresh the global velocity-fusion timers: as a secondary aid, wheel
+				// encoders must not hide a loss of GNSS velocity from the dead-reckoning checks
+				// or hold off the EKF-GSF yaw emergency reset. Their own freshness is
+				// _aid_src_wheel_encoder.time_last_fuse.
 				fuseBodyFrameVelocity(_aid_src_wheel_encoder, sample.time_us, measurement, measurement_var,
-						      math::max(_params.ekf2_wenc_gate, 1.f));
+						      math::max(_params.ekf2_wenc_gate, 1.f), false);
 			}
 		}
 	}

@@ -844,9 +844,12 @@ private:
 	void controlFusionModes(const imuSample &imu_delayed);
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION) || defined(CONFIG_EKF2_WHEEL_ENCODER)
-	// generic body-frame (FRD) velocity fusion, shared by external vision and wheel encoders
+	// generic body-frame (FRD) velocity fusion, shared by external vision and wheel encoders.
+	// update_vel_fuse_timestamps=false keeps a secondary aid from refreshing the global
+	// horizontal/vertical velocity-fusion timers (dead-reckoning and GSF yaw-reset inputs).
 	void fuseBodyFrameVelocity(estimator_aid_source3d_s &aid_src, const uint64_t &timestamp, const Vector3f &measurement,
-				   const Vector3f &measurement_var, const float &innovation_gate);
+				   const Vector3f &measurement_var, const float &innovation_gate,
+				   const bool update_vel_fuse_timestamps = true);
 #endif // CONFIG_EKF2_EXTERNAL_VISION || CONFIG_EKF2_WHEEL_ENCODER
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
