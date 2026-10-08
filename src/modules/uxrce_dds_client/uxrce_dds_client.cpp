@@ -176,11 +176,6 @@ bool UxrceddsClient::init()
 
 void UxrceddsClient::deinit()
 {
-	if (_fd >= 0) {
-		close(_fd);
-		_fd = -1;
-	}
-
 	if (_transport_serial) {
 		uxr_close_serial_transport(_transport_serial);
 		delete _transport_serial;
@@ -197,6 +192,8 @@ void UxrceddsClient::deinit()
 
 #endif // UXRCE_DDS_CLIENT_UDP
 
+	// Each transport closes its own fd. _fd is only a borrowed poll handle.
+	_fd = -1;
 	_comm = nullptr;
 }
 
