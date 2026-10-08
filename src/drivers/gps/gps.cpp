@@ -45,6 +45,7 @@
 #include <poll.h>
 #endif
 
+#include <cerrno>
 #include <cstring>
 
 #include <drivers/drv_sensor.h>
@@ -202,6 +203,19 @@ private:
 	unsigned			_rate_reading{0}; 				///< reading rate in B/s
 	hrt_abstime			_last_rtcm_injection_time{0};			///< time of last rtcm injection
 	uint8_t				_selected_rtcm_instance{0};			///< uorb instance that is being used for RTCM corrections
+	// DERIVED — re-validate on bench: 300 B drains in about 13 ms at 230400 baud.
+	static constexpr hrt_abstime RTCM_PENDING_TIMEOUT{500_ms};
+	gps_inject_data_s		_rtcm_pending_fragment{};
+	uint16_t			_rtcm_pending_offset{0};
+	bool				_rtcm_fragment_pending{false};
+	hrt_abstime			_rtcm_pending_since{0};
+	uint64_t			_rtcm_bytes_accepted{0};
+	uint64_t			_rtcm_bytes_dropped{0};
+	unsigned			_rtcm_uart_short_writes{0};
+	unsigned			_rtcm_uart_eagain{0};
+	unsigned			_rtcm_uart_write_errors{0};
+	unsigned			_rtcm_fragments_dropped_stale{0};
+	unsigned			_rtcm_uorb_messages_lost{0};
 
 	const Instance 			_instance;
 
@@ -257,11 +271,9 @@ private:
 	void handleInjectDataTopic();
 
 	/**
-	 * send data to the device, such as an RTCM stream
-	 * @param data
-	 * @param len
+	 * Write the pending RTCM fragment once; return true if it still needs service.
 	 */
-	inline bool injectData(uint8_t *data, size_t len);
+	bool injectData();
 
 	/**
 	 * set the Baudrate
@@ -473,10 +485,7 @@ int GPS::pollOrRead(uint8_t *buf, size_t buf_length, int timeout)
 
 		const ssize_t read_at_least = math::min(character_count, buf_length);
 
-		// handle injection data before read if caught up
-		if (_uart.bytesAvailable() < read_at_least) {
-			handleInjectDataTopic();
-		}
+		handleInjectDataTopic();
 
 		ret = _uart.readAtLeast(buf, buf_length, read_at_least, timeout_adjusted);
 
@@ -542,6 +551,10 @@ void GPS::handleInjectDataTopic()
 		return;
 	}
 
+	if (_rtcm_fragment_pending && injectData()) {
+		return;
+	}
+
 	// We don't want to call copy again further down if we have already done a
 	// copy in the selection process.
 	bool already_copied = false;
@@ -583,56 +596,97 @@ void GPS::handleInjectDataTopic()
 	const size_t max_num_injections = gps_inject_data_s::ORB_QUEUE_LENGTH;
 	size_t num_injections = 0;
 
-	do {
-		if (updated) {
-			num_injections++;
+	while (num_injections < max_num_injections) {
+		if (!updated) {
+			auto &sub = _orb_inject_data_sub[_selected_rtcm_instance];
+			const unsigned previous_generation = sub.get_last_generation();
+			updated = sub.update(&msg);
 
-			// Prevent injection of data from self
-			if (msg.device_id != get_device_id()) {
-				/* Write the message to the gps device. Note that the message could be fragmented.
-				* But as we don't write anywhere else to the device during operation, we don't
-				* need to assemble the message first.
-				*/
-				injectData(msg.data, msg.len);
+			if (!updated) {
+				break;
+			}
 
-				++_rtcm_injection_rate_message_count;
-				_last_rtcm_injection_time = hrt_absolute_time();
+			const unsigned generation = sub.get_last_generation();
+
+			if (generation != previous_generation + 1) {
+				_rtcm_uorb_messages_lost += generation - previous_generation - 1;
+				PX4_WARN("gps_inject_data lost, generation %u -> %u", previous_generation, generation);
 			}
 		}
 
-		auto &gps_inject_data_sub = _orb_inject_data_sub[_selected_rtcm_instance];
+		updated = false;
+		++num_injections;
 
-		const unsigned last_generation = gps_inject_data_sub.get_last_generation();
+		// Prevent injection of data from self
+		if (msg.device_id != get_device_id()) {
+			if (msg.len > sizeof(msg.data)) {
+				_rtcm_bytes_dropped += msg.len;
+				continue;
+			}
 
-		updated = gps_inject_data_sub.update(&msg);
+			_rtcm_pending_fragment = msg;
+			_rtcm_pending_offset = 0;
+			_rtcm_pending_since = hrt_absolute_time();
+			_rtcm_fragment_pending = true;
 
-		if (updated) {
-			if (gps_inject_data_sub.get_last_generation() != last_generation + 1) {
-				PX4_WARN("gps_inject_data lost, generation %u -> %u", last_generation, gps_inject_data_sub.get_last_generation());
+			if (injectData()) {
+				return;
 			}
 		}
-
-	} while (updated && num_injections < max_num_injections);
+	}
 }
 
-bool GPS::injectData(uint8_t *data, size_t len)
+bool GPS::injectData()
 {
-	dumpGpsData(data, len, gps_dump_comm_mode_t::Full, true);
+	if (hrt_elapsed_time(&_rtcm_pending_since) > RTCM_PENDING_TIMEOUT) {
+		_rtcm_bytes_dropped += _rtcm_pending_fragment.len - _rtcm_pending_offset;
+		++_rtcm_fragments_dropped_stale;
+		_rtcm_fragment_pending = false;
+		return false;
+	}
 
-	size_t written = 0;
+	const size_t remaining = _rtcm_pending_fragment.len - _rtcm_pending_offset;
+	uint8_t *data = _rtcm_pending_fragment.data + _rtcm_pending_offset;
+	ssize_t written = -1;
 
 	if (_interface == GPSHelper::Interface::UART) {
-		written = _uart.write((const void *) data, len);
+		written = _uart.write(data, remaining);
 
 #ifdef __PX4_LINUX
 
 	} else if (_interface == GPSHelper::Interface::SPI) {
-		written = ::write(_spi_fd, data, len);
+		written = ::write(_spi_fd, data, remaining);
 		::fsync(_spi_fd);
 #endif
 	}
 
-	return written == len;
+	if (written > 0) {
+		dumpGpsData(data, written, gps_dump_comm_mode_t::Full, true);
+		_rtcm_pending_offset += static_cast<uint16_t>(written);
+		_rtcm_bytes_accepted += written;
+	}
+
+	if (written == static_cast<ssize_t>(remaining)) {
+		_rtcm_fragment_pending = false;
+		++_rtcm_injection_rate_message_count;
+		_last_rtcm_injection_time = hrt_absolute_time();
+		return false;
+	}
+
+	if (written >= 0) {
+		++_rtcm_uart_short_writes;
+		return true;
+	}
+
+	if (errno == EAGAIN) {
+		++_rtcm_uart_eagain;
+		return true;
+	}
+
+	++_rtcm_uart_write_errors;
+	_rtcm_bytes_dropped += _rtcm_pending_fragment.len - _rtcm_pending_offset;
+	_rtcm_fragment_pending = false;
+	return false;
 }
 
 int GPS::setBaudrate(unsigned baud)
@@ -1178,6 +1232,11 @@ GPS::print_status()
 	PX4_INFO("status: %s, port: %s, baudrate: %d", _healthy ? "OK" : "NOT OK", _port, _baudrate);
 	PX4_INFO("sat info: %s", (_p_report_sat_info != nullptr) ? "enabled" : "disabled");
 	PX4_INFO("rate reading: \t\t%6i B/s", _rate_reading);
+	PX4_INFO("RTCM uart_short_writes: %u, uart_eagain: %u, uart_write_errors: %u",
+		 _rtcm_uart_short_writes, _rtcm_uart_eagain, _rtcm_uart_write_errors);
+	PX4_INFO("RTCM bytes_accepted: %llu, bytes_dropped: %llu, fragments_dropped_stale: %u, uorb_messages_lost: %u",
+		 (unsigned long long)_rtcm_bytes_accepted, (unsigned long long)_rtcm_bytes_dropped,
+		 _rtcm_fragments_dropped_stale, _rtcm_uorb_messages_lost);
 
 	if (_sensor_gps.timestamp != 0) {
 		if (_helper) {
