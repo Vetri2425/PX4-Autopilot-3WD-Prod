@@ -45,7 +45,9 @@
 #include <termios.h>
 
 Roboclaw::Roboclaw(const char *device_name, const char *bad_rate_parameter) :
-	OutputModuleInterface(MODULE_NAME, px4::wq_configurations::hp_default)
+	// Own serial work queue: blocking UART transactions with an unresponsive RoboClaw must never
+	// stall the shared hp_default queue (pwm_out, battery_status, board_adc, ...)
+	OutputModuleInterface(MODULE_NAME, px4::serial_port_to_wq(device_name))
 {
 	strncpy(_stored_device_name, device_name, sizeof(_stored_device_name) - 1);
 	_stored_device_name[sizeof(_stored_device_name) - 1] = '\0'; // Ensure null-termination
@@ -56,25 +58,31 @@ Roboclaw::Roboclaw(const char *device_name, const char *bad_rate_parameter) :
 
 Roboclaw::~Roboclaw()
 {
-	close(_uart_fd);
+	if (_uart_fd >= 0) {
+		close(_uart_fd);
+	}
 }
 
-int Roboclaw::initializeUART()
+int Roboclaw::openUART()
 {
-	// The Roboclaw has a serial communication timeout of 10ms
-	// Add a little extra to account for timing inaccuracy
-	static constexpr int TIMEOUT_US = 11_ms;
-	_uart_fd_timeout = { .tv_sec = 0, .tv_usec = TIMEOUT_US };
-
 	int32_t baud_rate_parameter_value{0};
 	int32_t baud_rate_posix{0};
-	param_get(param_find(_stored_baud_rate_parameter), &baud_rate_parameter_value);
+	const param_t baud_param = param_find(_stored_baud_rate_parameter);
+
+	if (baud_param == PARAM_INVALID) {
+		// Baud parameter not in this build: use the RoboClaw factory packet-serial rate
+		PX4_WARN("%s not found, using 115200", _stored_baud_rate_parameter);
+		baud_rate_parameter_value = 115200;
+
+	} else {
+		param_get(baud_param, &baud_rate_parameter_value);
+	}
 
 	switch (baud_rate_parameter_value) {
 	case 0: // Auto
 	default:
-		PX4_ERR("Please configure the port's baud_rate_parameter_value");
-		break;
+		PX4_ERR("unsupported baud rate %" PRId32 " in %s", baud_rate_parameter_value, _stored_baud_rate_parameter);
+		return ERROR;
 
 	case 2400:
 		baud_rate_posix = B2400;
@@ -112,13 +120,19 @@ int Roboclaw::initializeUART()
 	// start serial port
 	_uart_fd = open(_stored_device_name, O_RDWR | O_NOCTTY);
 
-	if (_uart_fd < 0) { err(1, "could not open %s", _stored_device_name); }
+	if (_uart_fd < 0) {
+		PX4_ERR("could not open %s", _stored_device_name);
+		return ERROR;
+	}
 
-	int ret = 0;
 	struct termios uart_config {};
-	ret = tcgetattr(_uart_fd, &uart_config);
 
-	if (ret < 0) { err(1, "failed to get attr"); }
+	if (tcgetattr(_uart_fd, &uart_config) < 0) {
+		PX4_ERR("failed to get attr");
+		close(_uart_fd);
+		_uart_fd = -1;
+		return ERROR;
+	}
 
 	uart_config.c_oflag &= ~ONLCR; // no CR for every LF
 	uart_config.c_cflag &= ~CRTSCTS;
@@ -131,34 +145,45 @@ int Roboclaw::initializeUART()
 	uart_config.c_cflag |= CS8;
 
 	// Set baud rate
-	ret = cfsetispeed(&uart_config, baud_rate_posix);
-
-	if (ret < 0) { err(1, "failed to set input speed"); }
-
-	ret = cfsetospeed(&uart_config, baud_rate_posix);
-
-	if (ret < 0) { err(1, "failed to set output speed"); }
-
-	ret = tcsetattr(_uart_fd, TCSANOW, &uart_config);
-
-	if (ret < 0) { err(1, "failed to set attr"); }
+	if ((cfsetispeed(&uart_config, baud_rate_posix) < 0)
+	    || (cfsetospeed(&uart_config, baud_rate_posix) < 0)
+	    || (tcsetattr(_uart_fd, TCSANOW, &uart_config) < 0)) {
+		PX4_ERR("failed to configure %s", _stored_device_name);
+		close(_uart_fd);
+		_uart_fd = -1;
+		return ERROR;
+	}
 
 	FD_ZERO(&_uart_fd_set);
 	FD_SET(_uart_fd, &_uart_fd_set);
+
+	return OK;
+}
+
+int Roboclaw::initializeUART()
+{
+	if ((_uart_fd < 0) && (openUART() != OK)) {
+		return ERROR;
+	}
+
+	_init_attempts++;
 
 	// Make sure the device does respond
 	static constexpr int READ_STATUS_RESPONSE_SIZE = 6;
 	uint8_t response_buffer[READ_STATUS_RESPONSE_SIZE];
 
 	if (receiveTransaction(Command::ReadStatus, response_buffer, READ_STATUS_RESPONSE_SIZE) < READ_STATUS_RESPONSE_SIZE) {
-		PX4_ERR("No valid response, stopping driver");
-		request_stop();
-		return ERROR;
+		// Keep the port and retry: a RoboClaw that boots after PX4 must still connect.
+		// Until then no motor command is sent, i.e. the drivetrain stays stopped.
+		if (_init_attempts == 1 || (_init_attempts % 30) == 0) {
+			PX4_ERR("no valid response on %s (attempt %" PRIu32 "), retrying", _stored_device_name, _init_attempts);
+		}
 
-	} else {
-		PX4_INFO("Successfully connected");
-		return OK;
+		return ERROR;
 	}
+
+	PX4_INFO("Successfully connected on %s", _stored_device_name);
+	return OK;
 }
 
 bool Roboclaw::updateOutputs(uint16_t outputs[MAX_ACTUATORS],
@@ -194,12 +219,26 @@ void Roboclaw::Run()
 		return;
 	}
 
-	_mixing_output.update();
-
+	// The UART must be up before the mixer runs: updateOutputs() and readEncoder() talk to the device
 	if (!_uart_initialized) {
-		initializeUART();
+		const hrt_abstime now = hrt_absolute_time();
+
+		if (now < _next_init_attempt) {
+			// Woken early by an actuator_motors callback: wait for the retry timer
+			ScheduleAt(_next_init_attempt);
+			return;
+		}
+
+		if (initializeUART() != OK) {
+			_next_init_attempt = now + INIT_RETRY_INTERVAL_US;
+			ScheduleAt(_next_init_attempt);
+			return;
+		}
+
 		_uart_initialized = true;
 	}
+
+	_mixing_output.update();
 
 	// check for parameter updates
 	if (_parameter_update_sub.updated()) {
@@ -594,6 +633,8 @@ The command to start this driver is: `$ roboclaw start <UART device> <baud rate>
 
 int Roboclaw::print_status()
 {
+	PX4_INFO("port: %s, %s (init attempts: %" PRIu32 ")", _stored_device_name,
+		 _uart_initialized ? "connected" : "NOT connected", _init_attempts);
 	return 0;
 }
 

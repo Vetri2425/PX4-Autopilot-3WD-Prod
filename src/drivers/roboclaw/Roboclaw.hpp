@@ -132,11 +132,19 @@ private:
 	int32_t swapBytesInt32(uint8_t *buffer);
 
 	// UART handling
+	// The Roboclaw has a serial communication timeout of 10ms; add a little extra for timing inaccuracy
+	static constexpr int UART_TIMEOUT_US = 11'000;
+	// Retry period for opening the port / the ReadStatus handshake (e.g. RoboClaw powered after PX4)
+	static constexpr hrt_abstime INIT_RETRY_INTERVAL_US = 1'000'000;
+
 	int initializeUART();
+	int openUART();
 	bool _uart_initialized{false};
-	int _uart_fd{0};
+	int _uart_fd{-1}; // -1 until the port is open: never talk to fd 0 (the work queue's stdin)
 	fd_set _uart_fd_set;
-	struct timeval _uart_fd_timeout;
+	struct timeval _uart_fd_timeout {0, UART_TIMEOUT_US};
+	hrt_abstime _next_init_attempt{0};
+	uint32_t _init_attempts{0};
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::RBCLW_ADDRESS>) _param_rbclw_address,
