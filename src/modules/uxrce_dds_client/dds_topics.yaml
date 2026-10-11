@@ -53,8 +53,9 @@ publications:
   - topic: /fmu/out/transponder_report
     type: px4_msgs::msg::TransponderReport
  
-  # - topic: /fmu/out/vehicle_angular_velocity
-  #   type: px4_msgs::msg::VehicleAngularVelocity
+  - topic: /fmu/out/vehicle_angular_velocity
+    type: px4_msgs::msg::VehicleAngularVelocity
+    rate_limit: 100.
 
   - topic: /fmu/out/vehicle_land_detected
     type: px4_msgs::msg::VehicleLandDetected
@@ -80,7 +81,14 @@ publications:
 
   - topic: /fmu/out/vehicle_local_position
     type: px4_msgs::msg::VehicleLocalPosition
-    rate_limit: 50.
+    rate_limit: 100.
+
+  # The RoboClaw driver publishes only after a successful encoder read; its
+  # Run() follows actuator_motors updates, not a fixed poll. Capped at 100 Hz.
+  # The companion gates on sample staleness (drivetrain power or link lost).
+  - topic: /fmu/out/wheel_encoders
+    type: px4_msgs::msg::WheelEncoders
+    rate_limit: 100.
 
   - topic: /fmu/out/vehicle_odometry
     type: px4_msgs::msg::VehicleOdometry
