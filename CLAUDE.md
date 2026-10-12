@@ -83,6 +83,18 @@ default parameters — not "it builds".
 
 **Roadmap F1 firmware code complete. CI-verified, GATE 2 replay-verified where replay applies.**
 
+### Firmware sweep — 2026-10-13
+
+- FW-01 `915fee368e` (CI [38274622203](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/38274622203)): RoboClaw transaction-failure counters and rate-limited warnings; `src/drivers/roboclaw/Roboclaw.cpp`, `.hpp`.
+- FW-02 `1384118a5a` (CI [38275937862](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/38275937862)): bounded UDP receive drain; `src/modules/uxrce_dds_client/uxrce_dds_client.cpp`.
+- FW-03 NOT NEEDED: UDP already retries at boot in `src/modules/uxrce_dds_client/uxrce_dds_client.cpp:638-650`.
+- SAF-08 `266dd34045` (CI [38277249932](https://github.com/Vetri2425/PX4-Autopilot-3WD-Prod/actions/runs/38277249932), green): explicit OFFBOARD rover setpoints older than 150 ms command zero speed/yaw rate and invalidate stale attitude; `DifferentialOffboardMode.cpp:81-120`. Artifact: `PX4-Firmware/3WD/266dd34045-fix-rover-differential-stop-on-stale-offboard-rover-setpoints-saf-08/`, SHA-256 `2551f534b19496589e71d4b8a73879298eefaa920cc225ecafe319e5795754be`, FLASH 1,791,324 B / AXI_SRAM 126,492 B (+2,320 B FLASH vs `07eceb4536`).
+- FW-06 already done: GPS-driver fork `80fe20d`, bumped by `7b583c9eb9`; no PX4 receiver configuration.
+
+**FW-07 B1 audit at branch tip:** #1/#2 WENC fusion and lever-arm `b5189bd734` (`EKF2.cpp:2236-2255`, `wheel_encoder_fusion.cpp:79-114`); #3 GNSS-yaw N/G `1cc5c364b8` (`params_gnss_yaw.yaml:5-31`); #4 encoder pre-UART timestamp `07bcfdc601` (`Roboclaw.cpp:289-299`); #5-#8 QPPS/raw/select/zero-deadband `14e3fb88b2` (`Roboclaw.cpp:196,307-321`, `Roboclaw.hpp:98-99`); #9-#11 logger instrumentation `385034b7ef` + `809b3561c0` (`logged_topics.cpp:197-198`); #12 design contract is retained in `DYX_3WD/docs/contracts/`.
+
+**FW-07 B2 audit:** #13 drop (v1.17 land detector retains RTL waypoint logic, `RoverLandDetector.cpp:52-75`); #14 drop (upstream rover takeoff acceptance, `mission_block.cpp:212-217`); #15 re-derived as explicit setpoints `b19901b004` plus SAF-08 `266dd34045`; #16 drop (direct `rover_rate_setpoint`, `DifferentialOffboardMode.cpp:75-79`); #17 drop (no `RD_TANK_MODE`; manual-only and out of scope).
+
 ⚠ **NOTHING HAS BEEN FLASHED OR HARDWARE-VALIDATED.** Candidate for the first flash:
 **`7b583c9eb9`** — `3WD_PROD/PX4-Firmware/3WD/7b583c9eb9-fix-gps-use-dyx-gps-driver-fork-px4-never-configures-the-um982/`
 (FLASH 1,789,004 B = 90.99 %, AXI_SRAM 19.22 %, 0 compiler warnings, CI run 37618859283,
