@@ -172,7 +172,12 @@ bool UxrceddsClient::init()
 			const int flags = fcntl(_fd, F_GETFL, 0);
 
 			if (flags < 0 || fcntl(_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
-				PX4_WARN("UDP non-blocking setup failed (errno %d)", errno);
+				// Fail closed: never run this transport blocking; the caller retries init().
+				PX4_ERR("UDP non-blocking setup failed (errno %d)", errno);
+				deinit();
+				_comm = nullptr;
+				_fd = -1;
+				return false;
 			}
 
 #endif // __PX4_NUTTX
