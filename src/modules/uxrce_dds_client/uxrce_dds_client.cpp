@@ -45,6 +45,7 @@
 #include <ucdr/microcdr.h>
 
 #include <termios.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -161,6 +162,20 @@ bool UxrceddsClient::init()
 
 			_comm = &_transport_udp->comm;
 			_fd = _transport_udp->platform.poll_fd.fd;
+
+#if defined(__PX4_NUTTX)
+			// On NuttX a blocking UDP send waits without limit for a free network I/O buffer, while this
+			// thread is the only reader of the socket's queued input, so the client can hang for good
+			// (PX4 #25956, NuttX #17299). Non-blocking, a send with no free buffer fails instead: the
+			// session ignores a failed send, a best-effort sample is lost and a reliable one is resent.
+			// Reads are unaffected: the transport only calls recv() after poll() reports data.
+			const int flags = fcntl(_fd, F_GETFL, 0);
+
+			if (flags < 0 || fcntl(_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+				PX4_WARN("UDP non-blocking setup failed (errno %d)", errno);
+			}
+
+#endif // __PX4_NUTTX
 
 			return true;
 
