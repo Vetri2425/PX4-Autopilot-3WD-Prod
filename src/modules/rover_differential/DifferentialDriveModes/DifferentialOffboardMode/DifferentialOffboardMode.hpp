@@ -80,10 +80,20 @@ private:
 	// uORB subscriptions
 	uORB::Subscription _trajectory_setpoint_sub{ORB_ID(trajectory_setpoint)};
 	uORB::Subscription _offboard_control_mode_sub{ORB_ID(offboard_control_mode)};
+	uORB::Subscription _rover_speed_setpoint_sub{ORB_ID(rover_speed_setpoint)};
 
 	// uORB publications
 	uORB::Publication<rover_rate_setpoint_s> _rover_rate_setpoint_pub{ORB_ID(rover_rate_setpoint)};
 	uORB::Publication<rover_attitude_setpoint_s> _rover_attitude_setpoint_pub{ORB_ID(rover_attitude_setpoint)};
 	uORB::Publication<rover_speed_setpoint_s> _rover_speed_setpoint_pub{ORB_ID(rover_speed_setpoint)};
 	uORB::Publication<rover_position_setpoint_s> _rover_position_setpoint_pub{ORB_ID(rover_position_setpoint)};
+
+	// DERIVED — NOT FROM V1 SPEC: 15 periods at the companion's 100 Hz update rate, more than twice
+	// the 60 ms worst bench gap, and less than COM_OF_LOSS_T (0.5 s).
+	static constexpr hrt_abstime SETPOINT_STALE_TIMEOUT_US{150'000};
+
+	hrt_abstime _last_companion_speed_setpoint_timestamp{0};
+	hrt_abstime _stale_speed_setpoint_timestamp{0};
+	hrt_abstime _last_stale_warning_timestamp{0};
+	bool _setpoint_stale{false};
 };

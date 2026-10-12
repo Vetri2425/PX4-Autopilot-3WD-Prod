@@ -78,6 +78,54 @@ void DifferentialOffboardMode::offboardControl()
 		// yaw, rover_rate_setpoint directly, and the speed/attitude/rate controllers enabled
 		// by the velocity flag consume them unmodified.
 		if (!trajectory_setpoint_valid || !velocity_ned.isAllFinite()) {
+			const hrt_abstime now = hrt_absolute_time();
+			rover_speed_setpoint_s rover_speed_setpoint{};
+
+			if (_rover_speed_setpoint_sub.update(&rover_speed_setpoint)
+			    && rover_speed_setpoint.timestamp != _stale_speed_setpoint_timestamp) {
+				_last_companion_speed_setpoint_timestamp = rover_speed_setpoint.timestamp;
+			}
+
+			const bool setpoint_stale = _last_companion_speed_setpoint_timestamp == 0
+						   || now - _last_companion_speed_setpoint_timestamp > SETPOINT_STALE_TIMEOUT_US;
+
+			if (setpoint_stale) {
+				if (!_setpoint_stale) {
+					_setpoint_stale = true;
+
+					if (_last_stale_warning_timestamp == 0 || hrt_elapsed_time(&_last_stale_warning_timestamp) > 1_s) {
+						PX4_WARN("stale explicit OFFBOARD rover setpoint: commanding stop");
+						_last_stale_warning_timestamp = now;
+					}
+				}
+
+				// Stop through the existing speed/rate controllers. Invalidate the stale attitude
+				// target as well: attitude control otherwise publishes a fresh non-zero rate later
+				// in this cycle and overrides the zero rate below.
+				rover_speed_setpoint.timestamp = now;
+				rover_speed_setpoint.speed_body_x = 0.f;
+				_rover_speed_setpoint_pub.publish(rover_speed_setpoint);
+				_stale_speed_setpoint_timestamp = now;
+
+				rover_attitude_setpoint_s rover_attitude_setpoint{};
+				rover_attitude_setpoint.timestamp = now;
+				rover_attitude_setpoint.yaw_setpoint = NAN;
+				_rover_attitude_setpoint_pub.publish(rover_attitude_setpoint);
+
+				rover_rate_setpoint_s rover_rate_setpoint{};
+				rover_rate_setpoint.timestamp = now;
+				rover_rate_setpoint.yaw_rate_setpoint = 0.f;
+				_rover_rate_setpoint_pub.publish(rover_rate_setpoint);
+
+			} else if (_setpoint_stale) {
+				_setpoint_stale = false;
+
+				if (hrt_elapsed_time(&_last_stale_warning_timestamp) > 1_s) {
+					PX4_WARN("fresh explicit OFFBOARD rover setpoint: resuming control");
+					_last_stale_warning_timestamp = now;
+				}
+			}
+
 			return;
 		}
 
