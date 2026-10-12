@@ -53,6 +53,7 @@
 static constexpr char NAMESPACE_PREFIX[] = "uav_";
 #define PARTICIPANT_XML_SIZE 512
 static constexpr uint8_t TIMESYNC_MAX_TIMEOUTS = 10;
+static constexpr hrt_abstime RX_DRAIN_BUDGET = 3'000;
 
 using namespace time_literals;
 
@@ -696,8 +697,17 @@ void UxrceddsClient::run()
 				}
 			}
 
-			// run session with 0 timeout (non-blocking)
-			uxr_run_session_timeout(&session, 0);
+			// uxr_run_session_timeout(..., 0) receives one datagram. Drain a bounded
+			// RX burst so UDP read-ahead cannot consume all NuttX IOBs, while retaining
+			// most of the 10 ms client loop for outgoing uORB updates.
+			const hrt_abstime rx_drain_deadline = hrt_absolute_time() + RX_DRAIN_BUDGET;
+
+			do {
+				uxr_run_session_timeout(&session, 0);
+				bytes_available = 0;
+			} while (hrt_absolute_time() < rx_drain_deadline
+				 && ioctl(_fd, FIONREAD, (unsigned long)&bytes_available) == OK
+				 && bytes_available > 0);
 
 			// check if there are available replies
 			process_replies();
