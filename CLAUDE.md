@@ -79,9 +79,13 @@ across 1.16 → 1.17: `common.h`, `ekf.h` and `control.cpp` all moved.
 corpus *before* flashing. Pass criterion is decision-identical `estimator_aid_src_*` output at
 default parameters — not "it builds".
 
-## Current status — 2026-10-07 (night)
+## Current status — 2026-10-13
 
-**Roadmap F1 firmware code complete. CI-verified, GATE 2 replay-verified where replay applies.**
+**Flashed on rover 01: `07eceb4536`** (production branch tip; LNK-14 fix, bench-proven 40 armed cycles, pinned in
+`DYX_3WD/installer/pins/firmware.pin`). Branch `fw/2026-10-13-fw-sweep` carries the sweep below, CI-green, **not
+flashed yet**: bench on rover 01, then fast-forward `dyx-3wd-production`, one controlled CI build, delete the branch,
+bump the rover-stack pin. Flash the CI build of the **branch tip** (dispatched after the last CLAUDE.md commit),
+so the hash the FCU reports is the SHA that lands on production.
 
 ### Firmware sweep — 2026-10-13
 
@@ -95,7 +99,11 @@ default parameters — not "it builds".
 
 **FW-07 B2 audit:** #13 drop (v1.17 land detector retains RTL waypoint logic, `RoverLandDetector.cpp:52-75`); #14 drop (upstream rover takeoff acceptance, `mission_block.cpp:212-217`); #15 re-derived as explicit setpoints `b19901b004` plus SAF-08 `266dd34045`; #16 drop (direct `rover_rate_setpoint`, `DifferentialOffboardMode.cpp:75-79`); #17 drop (no `RD_TANK_MODE`; manual-only and out of scope).
 
-⚠ **NOTHING HAS BEEN FLASHED OR HARDWARE-VALIDATED.** Candidate for the first flash:
+## History — 2026-10-07 (night), kept for the record
+
+**Roadmap F1 firmware code complete. CI-verified, GATE 2 replay-verified where replay applies.**
+
+At that date nothing had been flashed; the first flash candidate was:
 **`7b583c9eb9`** — `3WD_PROD/PX4-Firmware/3WD/7b583c9eb9-fix-gps-use-dyx-gps-driver-fork-px4-never-configures-the-um982/`
 (FLASH 1,789,004 B = 90.99 %, AXI_SRAM 19.22 %, 0 compiler warnings, CI run 37618859283,
 `.px4` sha256 `304b22bdfbb59033df15012d687f07d352cd01d3ddc62112c35cec24ab779483`).
