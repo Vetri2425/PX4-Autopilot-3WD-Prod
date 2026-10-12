@@ -436,7 +436,7 @@ int Roboclaw::readAcknowledgement()
 	int select_status = select(_uart_fd + 1, &read_fds, nullptr, nullptr, &timeout);
 
 	if (select_status <= 0) {
-		PX4_ERR("ACK timeout");
+		reportFailure("timeout", _timeout_failures);
 		return ERROR;
 	}
 
@@ -444,11 +444,21 @@ int Roboclaw::readAcknowledgement()
 	int bytes_read = read(_uart_fd, &acknowledgement, 1);
 
 	if ((bytes_read != 1) || (acknowledgement != 0xFF)) {
-		PX4_ERR("ACK wrong");
+		reportFailure("ACK", _ack_failures);
 		return ERROR;
 	}
 
 	return OK;
+}
+
+void Roboclaw::reportFailure(const char *kind, uint32_t &counter)
+{
+	counter++;
+
+	// A failed transaction at 100 Hz must be visible without flooding the system log.
+	if (counter == 1 || counter % 100 == 0) {
+		PX4_WARN("%s failures: %" PRIu32, kind, counter);
+	}
 }
 
 int Roboclaw::receiveTransaction(Command command, uint8_t *read_buffer, size_t bytes_to_read)
@@ -508,14 +518,14 @@ int Roboclaw::readResponse(Command command, uint8_t *read_buffer, size_t bytes_t
 		int select_status = select(_uart_fd + 1, &read_fds, nullptr, nullptr, &timeout);
 
 		if (select_status <= 0) {
-			PX4_ERR("Select timeout %d\n", select_status);
+			reportFailure("timeout", _timeout_failures);
 			return ERROR;
 		}
 
 		int bytes_read = read(_uart_fd, &read_buffer[total_bytes_read], bytes_to_read - total_bytes_read);
 
 		if (bytes_read <= 0) {
-			PX4_ERR("Read timeout %d\n", select_status);
+			reportFailure("short read", _short_read_failures);
 			return ERROR;
 		}
 
@@ -523,7 +533,7 @@ int Roboclaw::readResponse(Command command, uint8_t *read_buffer, size_t bytes_t
 	}
 
 	if (total_bytes_read < 2) {
-		PX4_ERR("Too short payload received\n");
+		reportFailure("short read", _short_read_failures);
 		return ERROR;
 	}
 
@@ -536,7 +546,7 @@ int Roboclaw::readResponse(Command command, uint8_t *read_buffer, size_t bytes_t
 	uint16_t crc_received = (read_buffer[total_bytes_read - 2] << 8) + read_buffer[total_bytes_read - 1];
 
 	if (crc_calculated != crc_received) {
-		PX4_ERR("Checksum mismatch\n");
+		reportFailure("CRC", _crc_failures);
 		return ERROR;
 	}
 
@@ -635,6 +645,8 @@ int Roboclaw::print_status()
 {
 	PX4_INFO("port: %s, %s (init attempts: %" PRIu32 ")", _stored_device_name,
 		 _uart_initialized ? "connected" : "NOT connected", _init_attempts);
+	PX4_INFO("transaction failures: ACK=%" PRIu32 ", CRC=%" PRIu32 ", timeout=%" PRIu32 ", short-read=%" PRIu32,
+		 _ack_failures, _crc_failures, _timeout_failures, _short_read_failures);
 	return 0;
 }
 

@@ -127,6 +127,7 @@ private:
 	int writeCommand(Command cmd);
 	int readResponse(Command command, uint8_t *read_buffer, size_t bytes_to_read);
 	void flushRx(); ///< discard pending UART input after a failed transaction to resynchronize framing
+	void reportFailure(const char *kind, uint32_t &counter);
 
 	static uint16_t _calcCRC(const uint8_t *buf, size_t n, uint16_t init = 0);
 	int32_t swapBytesInt32(uint8_t *buffer);
@@ -145,6 +146,10 @@ private:
 	struct timeval _uart_fd_timeout {0, UART_TIMEOUT_US};
 	hrt_abstime _next_init_attempt{0};
 	uint32_t _init_attempts{0};
+	uint32_t _ack_failures{0};
+	uint32_t _crc_failures{0};
+	uint32_t _timeout_failures{0};
+	uint32_t _short_read_failures{0};
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::RBCLW_ADDRESS>) _param_rbclw_address,
