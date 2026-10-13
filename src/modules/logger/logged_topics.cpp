@@ -106,15 +106,16 @@ void LoggedTopics::add_default_topics()
 	add_topic("position_setpoint_triplet", 200);
 	add_optional_topic("px4io_status");
 	add_topic("radio_status");
-	add_optional_topic("rover_attitude_setpoint", 100);
-	add_optional_topic("rover_attitude_status", 100);
+	// 3WD rover: the control path at 50 Hz (stock 10 Hz); the companion commands at 100 Hz.
+	add_optional_topic("rover_attitude_setpoint", 20);
+	add_optional_topic("rover_attitude_status", 20);
 	add_optional_topic("rover_position_setpoint", 100);
-	add_optional_topic("rover_rate_setpoint", 100);
-	add_optional_topic("rover_rate_status", 100);
-	add_optional_topic("rover_speed_setpoint", 100);
-	add_optional_topic("rover_speed_status", 100);
-	add_optional_topic("rover_steering_setpoint", 100);
-	add_optional_topic("rover_throttle_setpoint", 100);
+	add_optional_topic("rover_rate_setpoint", 20);
+	add_optional_topic("rover_rate_status", 20);
+	add_optional_topic("rover_speed_setpoint", 20);
+	add_optional_topic("rover_speed_status", 20);
+	add_optional_topic("rover_steering_setpoint", 20);
+	add_optional_topic("rover_throttle_setpoint", 20);
 	add_topic("rtl_time_estimate", 1000);
 	add_topic("rtl_status", 2000);
 	add_optional_topic("sensor_airflow", 100);
@@ -133,7 +134,7 @@ void LoggedTopics::add_default_topics()
 	add_topic("vehicle_acceleration", 50);
 	add_topic("vehicle_air_data", 200);
 	add_topic("vehicle_angular_velocity", 20);
-	add_topic("vehicle_attitude", 50);
+	add_topic("vehicle_attitude", 20); // 3WD rover: 50 Hz (stock 20 Hz)
 	add_topic("vehicle_attitude_setpoint", 50);
 	add_topic("vehicle_command");
 	add_topic("vehicle_command_ack");
@@ -142,7 +143,7 @@ void LoggedTopics::add_default_topics()
 	add_topic("vehicle_global_position", 200);
 	add_topic("vehicle_gps_position", 100);
 	add_topic("vehicle_land_detected");
-	add_topic("vehicle_local_position", 100);
+	add_topic("vehicle_local_position", 20); // 3WD rover: 50 Hz (stock 10 Hz)
 	add_topic("vehicle_local_position_setpoint", 100);
 	add_topic("vehicle_magnetometer", 200);
 	add_topic("vehicle_rates_setpoint", 20);
@@ -184,6 +185,7 @@ void LoggedTopics::add_default_topics()
 	// important EKF topics (higher rate)
 	add_optional_topic("estimator_selector_status", 10);
 	add_optional_topic_multi("estimator_event_flags", 10);
+	add_optional_topic_multi("estimator_innovations", 100); // 3WD rover: 10 Hz (stock 2 Hz)
 	add_optional_topic_multi("estimator_optical_flow_vel", 200);
 	add_optional_topic_multi("estimator_sensor_bias", 1000);
 	add_optional_topic_multi("estimator_status", 200);
@@ -194,8 +196,8 @@ void LoggedTopics::add_default_topics()
 	// Use non-optional subscriptions so topics that advertise after logger startup
 	// are picked up by Logger::copy_if_updated() retrying the subscription.
 	// Log all possible Multi-EKF instances, consistent with other estimator topics.
-	add_topic("wheel_encoders", 50);
-	add_topic_multi("estimator_aid_src_wheel_encoder", 50);
+	add_topic("wheel_encoders", 20);
+	add_topic_multi("estimator_aid_src_wheel_encoder", 20);
 
 	// log all raw sensors at minimal rate (at least 1 Hz)
 	add_topic_multi("battery_status", 200, 3);
@@ -203,7 +205,7 @@ void LoggedTopics::add_default_topics()
 	add_topic_multi("distance_sensor", 1000, 2);
 	add_optional_topic_multi("sensor_accel", 1000, 4);
 	add_topic_multi("sensor_baro", 1000, 4);
-	add_topic_multi("sensor_gps", 1000, 2);
+	add_topic_multi("sensor_gps", 200, 2); // 3WD rover: every 5 Hz UM982 fix (stock 1 Hz)
 	add_topic_multi("sensor_gnss_relative", 1000, 1);
 	add_optional_topic_multi("sensor_gyro", 1000, 4);
 	add_topic_multi("sensor_mag", 1000, 4);
@@ -218,7 +220,7 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic("pps_capture");
 
 	// additional control allocation logging
-	add_topic("actuator_motors", 100);
+	add_topic("actuator_motors", 20); // 3WD rover: 50 Hz (stock 10 Hz)
 	add_topic("actuator_servos", 100);
 	add_topic_multi("vehicle_thrust_setpoint", 20, 2);
 	add_topic_multi("vehicle_torque_setpoint", 20, 2);
