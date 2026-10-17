@@ -1,0 +1,112 @@
+#!/bin/sh
+#
+# @name DYX 3WD Rover
+#
+# @type Rover
+# @class Rover
+#
+# @maintainer DYX
+#
+# DYX 3WD pre-line marking rover (Pixhawk 6X, RoboClaw on GPS2, UM982 on TELEM1, spray on AUX1). Vehicle-type defaults
+# carried from the field-validated rover 01 configuration (2026-10-13..16, firmware 08450195f2): the stock differential
+# rover defaults first, then these, so these win. Per-rover calibration is NOT here and stays per rover
+# (DYX_3WD dyx3-fmu param apply): RBCLW_COUNTS_REV, RBCLW_QPPS_MAX, RO_MAX_THR_SPEED (RoboClaw autotune / encoder),
+# EKF2_WENC_RAD (rolling radius), BAT*_V_DIV (power module), RC*_REV / RC_CHAN_CNT (transmitter), CAL_* (sensors).
+# MAV_2_CONFIG stays at the board default 0 (no MAVLink on Ethernet; QGC on Ethernet is a live setting only).
+#
+
+. ${R}etc/init.d/rc.rover_differential_defaults
+
+param set-default BAT1_A_PER_V     12
+param set-default BAT1_CAPACITY    24000
+param set-default BAT1_N_CELLS     8
+param set-default BAT1_V_CHARGED   3.4
+param set-default BAT1_V_EMPTY     2.75
+param set-default BAT2_A_PER_V     17
+param set-default BAT_CRIT_THR     0.1
+param set-default BAT_EMERGEN_THR  0.2
+param set-default BAT_LOW_THR      0.3
+param set-default COM_ARM_HFLT_CHK 0
+param set-default COM_ARM_MAG_STR  0
+param set-default COM_ARM_WO_GPS   2
+param set-default COM_DISARM_PRFLT 0
+param set-default COM_FLTMODE1     0
+param set-default COM_FLTMODE4     4
+param set-default COM_FLTMODE6     3
+param set-default COM_FLTT_LOW_ACT 3
+param set-default COM_OBL_RC_ACT   7
+param set-default COM_OF_LOSS_T    0.5
+param set-default COM_RCL_EXCEPT   7
+param set-default COM_RC_IN_MODE   0
+param set-default COM_RC_OVERRIDE  0
+param set-default EKF2_GBIAS_INIT  0.1
+param set-default EKF2_GPS_CHECK   927
+param set-default EKF2_GPS_CTRL    15
+param set-default EKF2_GPS_DELAY   50
+param set-default EKF2_GPS_POS_Z   -0.4
+param set-default EKF2_GPS_P_NOISE 0.05
+param set-default EKF2_GPS_V_NOISE 0.2
+param set-default EKF2_GPS_YAW_OFF 180
+param set-default EKF2_IMU_POS_X   -0.055
+param set-default EKF2_MAG_CHECK   0
+param set-default EKF2_MAG_TYPE    5
+param set-default EKF2_MIN_RNG     0.1
+param set-default EKF2_MULTI_IMU   3
+param set-default EKF2_OF_CTRL     0
+param set-default EKF2_REQ_GPS_H   1
+param set-default EKF2_REQ_HDRIFT  1
+param set-default EKF2_WENC_CTRL   1
+param set-default EKF2_WENC_GATE   3
+param set-default GPS_1_CONFIG     101
+param set-default GPS_SAT_INFO     1
+param set-default GPS_YAW_OFFSET   180
+param set-default IMU_DGYRO_CUTOFF 30
+param set-default MAN_ARM_GESTURE  0
+param set-default MAV_0_CONFIG     0
+param set-default MIS_YAW_ERR      5
+param set-default NAV_ACC_RAD      0.05
+param set-default NAV_DLL_ACT      0
+param set-default NAV_RCL_ACT      6
+param set-default PP_LOOKAHD_GAIN  0.7
+param set-default PP_LOOKAHD_MAX   2
+param set-default PP_LOOKAHD_MIN   0.6
+param set-default PWM_AUX_DIS1     0
+param set-default PWM_AUX_FAIL1    0
+param set-default PWM_AUX_FAIL5    1000
+param set-default PWM_AUX_FUNC1    301
+param set-default PWM_AUX_MAX1     15000
+param set-default PWM_AUX_MIN1     0
+param set-default PWM_MAIN_DIS1    1500
+param set-default PWM_MAIN_DIS3    1500
+param set-default RBCLW_FUNC1      101
+param set-default RBCLW_FUNC2      102
+param set-default RBCLW_SER_CFG    202
+param set-default RC_MAP_ARM_SW    8
+param set-default RC_MAP_FLTMODE   5
+param set-default RC_MAP_PITCH     2
+param set-default RC_MAP_ROLL      1
+param set-default RC_MAP_THROTTLE  3
+param set-default RC_MAP_YAW       4
+param set-default RD_TRANS_DRV_TRN 0.7
+param set-default RD_TRANS_TRN_DRV 0.0349066
+param set-default RD_WHEEL_TRACK   0.47
+param set-default RO_ACCEL_LIM     0.5
+param set-default RO_DECEL_LIM     2
+param set-default RO_JERK_LIM      4
+param set-default RO_SPEED_I       0.02
+param set-default RO_SPEED_LIM     0.85
+param set-default RO_SPEED_P       0.18
+param set-default RO_YAW_ACCEL_LIM 25
+param set-default RO_YAW_DECEL_LIM 34
+param set-default RO_YAW_P         2.5
+param set-default RO_YAW_RATE_I    0.01
+param set-default RO_YAW_RATE_LIM  30
+param set-default RO_YAW_RATE_P    0.17
+param set-default RO_YAW_RATE_TH   0.4
+param set-default SDLOG_PROFILE    3
+param set-default SENS_IMU_MODE    0
+param set-default SER_GPS2_BAUD    115200
+param set-default SER_TEL1_BAUD    230400
+param set-default SYS_HAS_MAG      0
+param set-default UXRCE_DDS_DOM_ID 42
+param set-default UXRCE_DDS_PTCFG  1

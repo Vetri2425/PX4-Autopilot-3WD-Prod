@@ -3,8 +3,9 @@
 # board specific defaults
 #------------------------------------------------------------------------------
 
-# DYX 3WD production airframe: generic differential rover.
-param set-default SYS_AUTOSTART 50000
+# DYX 3WD production airframe: 50010 = the stock differential rover defaults plus the field-validated DYX 3WD vehicle
+# defaults (ROMFS airframes/50010_dyx_3wd_rover). Per-rover calibration is applied per rover (DYX_3WD dyx3-fmu param apply).
+param set-default SYS_AUTOSTART 50010
 
 # DYX 3WD production UM982: use the NMEA driver; never probe it as u-blox.
 param set-default GPS_1_PROTOCOL 6

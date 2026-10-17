@@ -145,6 +145,7 @@ if(CONFIG_MODULES_ROVER_DIFFERENTIAL)
 		# [50000, 50999] Differential rovers
 		50000_generic_rover_differential
 		50001_aion_robotics_r1_rover
+		50010_dyx_3wd_rover
 	)
 endif()
 
