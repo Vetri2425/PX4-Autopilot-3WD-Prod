@@ -79,13 +79,14 @@ across 1.16 → 1.17: `common.h`, `ekf.h` and `control.cpp` all moved.
 corpus *before* flashing. Pass criterion is decision-identical `estimator_aid_src_*` output at
 default parameters — not "it builds".
 
-## Current status — 2026-10-13
+## Current status — 2026-10-17
 
-**Flashed on rover 01: `07eceb4536`** (production branch tip; LNK-14 fix, bench-proven 40 armed cycles, pinned in
-`DYX_3WD/installer/pins/firmware.pin`). Branch `fw/2026-10-13-fw-sweep` carries the sweep below, CI-green, **not
-flashed yet**: bench on rover 01, then fast-forward `dyx-3wd-production`, one controlled CI build, delete the branch,
-bump the rover-stack pin. Flash the CI build of the **branch tip** (dispatched after the last CLAUDE.md commit),
-so the hash the FCU reports is the SHA that lands on production.
+**Stable release `dyx-3wd-v1.0.0` = `08450195f2`** (tag + GitHub release with the CI artifact of run 38400213707, `.px4`
+SHA-256 `fe430888cdc6fb916aff84b5ad12a4e09f1ce7b98c208604652de5d81ae66ede`). Flashed on rover 01 on 2026-10-13 and
+field-validated 2026-10-13..16; pinned in `DYX_3WD/installer/pins/firmware.pin`. `dyx-3wd-production` is at the tag; the
+`fw/2026-10-13-fw-sweep` branch below landed as `0db6934e37` and was deleted. The vehicle parameter baseline is not in the
+firmware: it lives in `DYX_3WD/config/px4/` and is attached to the release after the rover stack's next field session
+(FLD-12).
 
 ### Firmware sweep — 2026-10-13
 
